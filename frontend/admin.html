@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>FAKEPRESS 관리자</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family:
+                Arial,
+                "Malgun Gothic",
+                sans-serif;
+
+            background: #f4f5f7;
+            color: #111;
+        }
+
+        header {
+            background: #111;
+            color: white;
+            padding: 20px 30px;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        header span {
+            font-size: 14px;
+            opacity: 0.7;
+        }
+
+        main {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 22px;
+            margin-bottom: 25px;
+
+            box-shadow:
+                0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .section h2 {
+            margin-top: 0;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 8px;
+            padding: 9px 13px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .refresh {
+            background: #111;
+            color: white;
+        }
+
+        .ban {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .unban {
+            background: #2ecc71;
+            color: white;
+        }
+
+        .admin {
+            background: #8e44ad;
+            color: white;
+        }
+
+        .remove-admin {
+            background: #f39c12;
+            color: white;
+        }
+
+        .delete {
+            background: #c0392b;
+            color: white;
+        }
+
+        .back {
+            background: #ddd;
+            color: #111;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+
+        th {
+            background: #fafafa;
+        }
+
+        .status-admin {
+            color: #8e44ad;
+            font-weight: bold;
+        }
+
+        .status-banned {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        .status-normal {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+
+        .empty {
+            color: #888;
+            padding: 20px 0;
+        }
+
+        .article-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+
+            border-bottom: 1px solid #eee;
+            padding: 15px 0;
+            gap: 20px;
+        }
+
+        .article-info {
+            flex: 1;
+        }
+
+        .article-title {
+            font-size: 17px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .article-meta {
+            font-size: 13px;
+            color: #777;
+        }
+
+        #message {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+
+            background: #111;
+            color: white;
+
+            padding: 12px 18px;
+
+            border-radius: 8px;
+
+            display: none;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<header>
+
+    <h1>FAKEPRESS ADMIN</h1>
+
+    <span id="adminNickname">
+        관리자 확인 중...
+    </span>
+
+</header>
+
+
+<main>
+
+    <div class="section">
+
+        <div class="toolbar">
+
+            <h2>회원 관리</h2>
+
+            <button
+                class="refresh"
+                onclick="loadUsers()"
+            >
+                새로고침
+            </button>
+
+        </div>
+
+        <div id="userList">
+            불러오는 중...
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="toolbar">
+
+            <h2>기사 관리</h2>
+
+            <button
+                class="refresh"
+                onclick="loadArticles()"
+            >
+                새로고침
+            </button>
+
+        </div>
+
+        <div id="articleList">
+            불러오는 중...
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <button
+            class="back"
+            onclick="location.href='index.html'"
+        >
+            FAKEPRESS로 돌아가기
+        </button>
+
+    </div>
+
+</main>
+
+
+<div id="message"></div>
+
+
+<script src="admin.js"></script>
+
+</body>
+
+</html>
