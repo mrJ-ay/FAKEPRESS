@@ -3,13 +3,8 @@
 // FAKEPRESS
 // =========================================================
 
-// 로컬에서는 기존 백엔드 사용
-// Render에서는 같은 서버의 API 사용
-const API_URL =
-    window.location.hostname === "127.0.0.1" ||
-    window.location.hostname === "localhost"
-        ? "https://fakepress.onrender.com"
-        : window.location.origin;
+// Render 프론트엔드와 백엔드 분리 배포
+const API_URL = "https://fakepress.onrender.com";
 
 
 // =========================================================
@@ -181,11 +176,43 @@ async function login() {
             }
         );
 
-        const data = await response.json();
+        // JSON이라고 바로 가정하지 않고 텍스트로 받음
+        const rawText = await response.text();
+
+        console.log(
+            "LOGIN STATUS:",
+            response.status
+        );
+
+        console.log(
+            "LOGIN RESPONSE:",
+            rawText
+        );
+
+        let data = {};
+
+        if (rawText) {
+            try {
+                data = JSON.parse(rawText);
+            } catch (parseError) {
+                throw new Error(
+                    `서버 응답을 읽을 수 없습니다.\n\n` +
+                    `HTTP ${response.status}\n` +
+                    `${rawText}`
+                );
+            }
+        }
 
         if (!response.ok) {
             throw new Error(
-                data.detail || "로그인에 실패했습니다."
+                data.detail ||
+                `로그인에 실패했습니다. (HTTP ${response.status})`
+            );
+        }
+
+        if (!data.access_token || !data.user) {
+            throw new Error(
+                "로그인 응답에 필요한 정보가 없습니다."
             );
         }
 
@@ -248,11 +275,26 @@ async function registerUser() {
             }
         );
 
-        const data = await response.json();
+        const rawText = await response.text();
+
+        let data = {};
+
+        if (rawText) {
+            try {
+                data = JSON.parse(rawText);
+            } catch (error) {
+                throw new Error(
+                    `서버 응답을 읽을 수 없습니다.\n\n` +
+                    `HTTP ${response.status}\n` +
+                    `${rawText}`
+                );
+            }
+        }
 
         if (!response.ok) {
             throw new Error(
-                data.detail || "회원가입에 실패했습니다."
+                data.detail ||
+                "회원가입에 실패했습니다."
             );
         }
 
@@ -351,7 +393,7 @@ async function handleImageUpload(event) {
         return;
     }
 
-    // 먼저 로컬 미리보기
+    // 로컬 미리보기
     const localUrl =
         URL.createObjectURL(file);
 
@@ -430,7 +472,21 @@ async function uploadImage(file) {
         }
     );
 
-    const data = await response.json();
+    const rawText = await response.text();
+
+    let data = {};
+
+    if (rawText) {
+        try {
+            data = JSON.parse(rawText);
+        } catch (error) {
+            throw new Error(
+                `이미지 업로드 서버 응답 오류\n\n` +
+                `HTTP ${response.status}\n` +
+                `${rawText}`
+            );
+        }
+    }
 
     if (!response.ok) {
         throw new Error(
@@ -517,7 +573,21 @@ async function saveArticle() {
             );
         }
 
-        const data = await response.json();
+        const rawText = await response.text();
+
+        let data = {};
+
+        if (rawText) {
+            try {
+                data = JSON.parse(rawText);
+            } catch (error) {
+                throw new Error(
+                    `기사 저장 서버 응답 오류\n\n` +
+                    `HTTP ${response.status}\n` +
+                    `${rawText}`
+                );
+            }
+        }
 
         if (!response.ok) {
             throw new Error(
@@ -555,7 +625,21 @@ async function loadArticles() {
             `${API_URL}/articles`
         );
 
-        const data = await response.json();
+        const rawText = await response.text();
+
+        let data = [];
+
+        if (rawText) {
+            try {
+                data = JSON.parse(rawText);
+            } catch (error) {
+                throw new Error(
+                    `기사 목록 응답 오류\n\n` +
+                    `HTTP ${response.status}\n` +
+                    `${rawText}`
+                );
+            }
+        }
 
         if (!response.ok) {
             throw new Error(
@@ -688,8 +772,21 @@ async function viewArticle(id) {
             `${API_URL}/articles/${id}`
         );
 
-        const article =
-            await response.json();
+        const rawText = await response.text();
+
+        let article = {};
+
+        if (rawText) {
+            try {
+                article = JSON.parse(rawText);
+            } catch (error) {
+                throw new Error(
+                    `기사 응답 오류\n\n` +
+                    `HTTP ${response.status}\n` +
+                    `${rawText}`
+                );
+            }
+        }
 
         if (!response.ok) {
             throw new Error(
@@ -886,8 +983,21 @@ async function deleteArticle(id) {
             }
         );
 
-        const data =
-            await response.json();
+        const rawText = await response.text();
+
+        let data = {};
+
+        if (rawText) {
+            try {
+                data = JSON.parse(rawText);
+            } catch (error) {
+                throw new Error(
+                    `기사 삭제 서버 응답 오류\n\n` +
+                    `HTTP ${response.status}\n` +
+                    `${rawText}`
+                );
+            }
+        }
 
         if (!response.ok) {
             throw new Error(
@@ -1030,9 +1140,7 @@ function updatePreview() {
             "input",
             updatePreview
         );
-    }
 
-    if (element) {
         element.addEventListener(
             "change",
             updatePreview
@@ -1053,4 +1161,3 @@ function escapeHtml(value) {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
 }
-
