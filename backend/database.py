@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("postgresql://postgres.hzgcunavogdkrozpbjuk:dearjeahoon0106*@aws-0-ca-central-1.pooler.supabase.com:5432/postgres")
 
 if not DATABASE_URL:
     raise RuntimeError(
