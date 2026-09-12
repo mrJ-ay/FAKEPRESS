@@ -1,1891 +1,1056 @@
-// ============================================================
-// FAKEPRESS FRONTEND
-// ============================================================
+
+// =========================================================
+// FAKEPRESS
+// =========================================================
+
+// 로컬에서는 기존 백엔드 사용
+// Render에서는 같은 서버의 API 사용
+const API_URL =
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname === "localhost"
+        ? "http://127.0.0.1:8000"
+        : window.location.origin;
 
 
-// ============================================================
-// API
-// ============================================================
+// =========================================================
+// GLOBAL STATE
+// =========================================================
 
-const API_URL = "http://127.0.0.1:8000";
+let currentUser =
+    JSON.parse(localStorage.getItem("fakepress_user")) || null;
 
-
-// ============================================================
-// DOM
-// ============================================================
-
-const loginPage =
-    document.getElementById("loginPage");
-
-const editorPage =
-    document.getElementById("editorPage");
-
-const articlesPage =
-    document.getElementById("articlesPage");
-
-const viewPage =
-    document.getElementById("viewPage");
-
-
-const loginButton =
-    document.getElementById("loginButton");
-
-const adminButton =
-    document.getElementById("adminButton");
-
-const userInfo =
-    document.getElementById("userInfo");
-
-const loggedInUser =
-    document.getElementById("loggedInUser");
-
-
-// 로그인
-
-const loginNickname =
-    document.getElementById("loginNickname");
-
-const loginPassword =
-    document.getElementById("loginPassword");
-
-
-// 기사 입력
-
-const titleInput =
-    document.getElementById("title");
-
-const subtitleInput =
-    document.getElementById("subtitle");
-
-const authorInput =
-    document.getElementById("author");
-
-const dateInput =
-    document.getElementById("date");
-
-const imageInput =
-    document.getElementById("image");
-
-const contentInput =
-    document.getElementById("content");
-
-
-// 기사 목록
-
-const articleList =
-    document.getElementById("articleList");
-
-const searchInput =
-    document.getElementById("search");
-
-
-// 미리보기
-
-const previewTitle =
-    document.getElementById("previewTitle");
-
-const previewSubtitle =
-    document.getElementById("previewSubtitle");
-
-const previewAuthor =
-    document.getElementById("previewAuthor");
-
-const previewDate =
-    document.getElementById("previewDate");
-
-const previewImage =
-    document.getElementById("previewImage");
-
-const previewContent =
-    document.getElementById("previewContent");
-
-
-// 기사 보기
-
-const viewTitle =
-    document.getElementById("viewTitle");
-
-const viewSubtitle =
-    document.getElementById("viewSubtitle");
-
-const viewAuthor =
-    document.getElementById("viewAuthor");
-
-const viewDate =
-    document.getElementById("viewDate");
-
-const viewImage =
-    document.getElementById("viewImage");
-
-const viewContent =
-    document.getElementById("viewContent");
-
-
-// 편집 제목
-
-const editorTitle =
-    document.getElementById("editorTitle");
-
-
-// ============================================================
-// 상태
-// ============================================================
-
-let currentUser = null;
-
-let editingId = null;
-
-let currentArticleId = null;
-
-let imageData = "";
+let token =
+    localStorage.getItem("fakepress_token") || null;
 
 let articles = [];
 
-let imageUploading = false;
+let currentArticle = null;
+let editingArticleId = null;
+let imageData = "";
 
 
-// ============================================================
-// 이미지 URL 처리
-// ============================================================
-//
-// 기존 Base64 이미지:
-// data:image/... 로 시작하므로 그대로 사용
-//
-// 새 업로드 이미지:
-// /uploads/xxxxx.jpg 형태이므로
-// http://127.0.0.1:8000/uploads/xxxxx.jpg 로 변환
-//
-// 혹시 완전한 URL이 들어오면 그대로 사용
-// ============================================================
+// =========================================================
+// ELEMENTS
+// =========================================================
 
-function getImageUrl(
-    image
-) {
+const loginPage = document.getElementById("loginPage");
+const editorPage = document.getElementById("editorPage");
+const articlesPage = document.getElementById("articlesPage");
+const viewPage = document.getElementById("viewPage");
 
+const adminButton = document.getElementById("adminButton");
+const loginButton = document.getElementById("loginButton");
+
+const userInfo = document.getElementById("userInfo");
+const loggedInUser = document.getElementById("loggedInUser");
+
+const articleList = document.getElementById("articleList");
+
+
+// =========================================================
+// INITIALIZE
+// =========================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+    updateUI();
+    loadArticles();
+
+    const imageInput = document.getElementById("image");
+
+    if (imageInput) {
+        imageInput.addEventListener(
+            "change",
+            handleImageUpload
+        );
+    }
+});
+
+
+// =========================================================
+// AUTH UI
+// =========================================================
+
+function updateUI() {
+    if (currentUser) {
+        loginButton.textContent = "로그아웃";
+        loginButton.onclick = logout;
+
+        userInfo.hidden = false;
+
+        if (loggedInUser) {
+            loggedInUser.textContent =
+                `${currentUser.nickname}님`;
+        }
+
+        if (
+            adminButton &&
+            Number(currentUser.is_admin) === 1
+        ) {
+            adminButton.style.display = "inline-block";
+        } else if (adminButton) {
+            adminButton.style.display = "none";
+        }
+
+    } else {
+        loginButton.textContent = "로그인";
+        loginButton.onclick = showLogin;
+
+        userInfo.hidden = true;
+
+        if (adminButton) {
+            adminButton.style.display = "none";
+        }
+    }
+}
+
+
+// =========================================================
+// PAGE NAVIGATION
+// =========================================================
+
+function hideAllPages() {
+    if (loginPage) loginPage.hidden = true;
+    if (editorPage) editorPage.hidden = true;
+    if (articlesPage) articlesPage.hidden = true;
+    if (viewPage) viewPage.hidden = true;
+}
+
+function showLogin() {
+    hideAllPages();
+
+    if (loginPage) {
+        loginPage.hidden = false;
+    }
+}
+
+function showEditor() {
+    if (!currentUser) {
+        alert("로그인이 필요합니다.");
+        showLogin();
+        return;
+    }
+
+    hideAllPages();
+
+    if (editorPage) {
+        editorPage.hidden = false;
+    }
+}
+
+function showArticles() {
+    hideAllPages();
+
+    if (articlesPage) {
+        articlesPage.hidden = false;
+    }
+
+    loadArticles();
+}
+
+
+// =========================================================
+// LOGIN
+// =========================================================
+
+async function login() {
+    const nickname =
+        document.getElementById("loginNickname").value.trim();
+
+    const password =
+        document.getElementById("loginPassword").value;
+
+    if (!nickname || !password) {
+        alert("닉네임과 비밀번호를 입력하세요.");
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/login`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    nickname,
+                    password
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "로그인에 실패했습니다."
+            );
+        }
+
+        token = data.access_token;
+        currentUser = data.user;
+
+        localStorage.setItem(
+            "fakepress_token",
+            token
+        );
+
+        localStorage.setItem(
+            "fakepress_user",
+            JSON.stringify(currentUser)
+        );
+
+        updateUI();
+
+        alert("로그인되었습니다.");
+
+        showArticles();
+
+    } catch (error) {
+        console.error(error);
+        alert(error.message);
+    }
+}
+
+
+// =========================================================
+// REGISTER
+// =========================================================
+
+async function registerUser() {
+    const nickname =
+        document.getElementById("loginNickname").value.trim();
+
+    const password =
+        document.getElementById("loginPassword").value;
+
+    if (!nickname || !password) {
+        alert("닉네임과 비밀번호를 입력하세요.");
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/register`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    nickname,
+                    password
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "회원가입에 실패했습니다."
+            );
+        }
+
+        alert(data.message);
+
+    } catch (error) {
+        console.error(error);
+        alert(error.message);
+    }
+}
+
+
+// =========================================================
+// LOGOUT
+// =========================================================
+
+function logout() {
+    currentUser = null;
+    token = null;
+
+    localStorage.removeItem(
+        "fakepress_token"
+    );
+
+    localStorage.removeItem(
+        "fakepress_user"
+    );
+
+    updateUI();
+
+    alert("로그아웃되었습니다.");
+
+    showArticles();
+}
+
+
+// =========================================================
+// AUTH HEADER
+// =========================================================
+
+function authHeaders() {
+    return token
+        ? {
+            Authorization: `Bearer ${token}`
+        }
+        : {};
+}
+
+
+// =========================================================
+// IMAGE URL
+// =========================================================
+
+function getImageUrl(image) {
     if (!image) {
-
         return "";
-
     }
 
-
-    if (
-        image.startsWith("data:")
-    ) {
-
+    // 기존 Base64 이미지
+    if (image.startsWith("data:")) {
         return image;
-
     }
 
-
+    // 이미 완전한 URL
     if (
         image.startsWith("http://") ||
         image.startsWith("https://")
     ) {
-
         return image;
-
     }
 
-
-    return (
-        `${API_URL}` +
-        `${image.startsWith("/") ? "" : "/"}` +
-        `${image}`
-    );
-
+    // /uploads/... 같은 서버 상대경로
+    return `${API_URL}${
+        image.startsWith("/")
+            ? ""
+            : "/"
+    }${image}`;
 }
 
 
-// ============================================================
-// 인증 정보
-// ============================================================
-
-function loadCurrentUser() {
-
-    const savedUser =
-        localStorage.getItem(
-            "fakepress_current_user"
-        );
-
-    const savedToken =
-        localStorage.getItem(
-            "fakepress_token"
-        );
-
-
-    if (
-        savedUser &&
-        savedToken
-    ) {
-
-        try {
-
-            currentUser =
-                JSON.parse(
-                    savedUser
-                );
-
-        } catch {
-
-            currentUser = null;
-
-            localStorage.removeItem(
-                "fakepress_current_user"
-            );
-
-            localStorage.removeItem(
-                "fakepress_token"
-            );
-
-        }
-
-    } else {
-
-        currentUser = null;
-
-    }
-
-
-    updateLoginUI();
-
-}
-
-
-// ============================================================
-// 로그인 UI
-// ============================================================
-
-function updateLoginUI() {
-
-    if (currentUser) {
-
-        loginButton.hidden = true;
-
-        userInfo.hidden = false;
-
-        loggedInUser.textContent =
-            `${currentUser.nickname}님 로그인됨`;
-
-
-        // 관리자 계정이면 관리자 버튼 표시
-        if (
-            Number(currentUser.is_admin) === 1
-        ) {
-
-            adminButton.style.display =
-                "inline-block";
-
-        } else {
-
-            adminButton.style.display =
-                "none";
-
-        }
-
-    } else {
-
-        loginButton.hidden = false;
-
-        userInfo.hidden = true;
-
-        loggedInUser.textContent = "";
-
-
-        // 로그아웃 상태에서는 관리자 버튼 숨김
-        adminButton.style.display =
-            "none";
-
-    }
-
-}
-
-
-// ============================================================
-// 토큰
-// ============================================================
-
-function getToken() {
-
-    return localStorage.getItem(
-        "fakepress_token"
-    );
-
-}
-
-
-// ============================================================
-// 인증 헤더
-// ============================================================
-
-function getAuthHeaders() {
-
-    const token =
-        getToken();
-
-
-    if (!token) {
-
-        return {};
-
-    }
-
-
-    return {
-
-        "Authorization":
-            `Bearer ${token}`
-
-    };
-
-}
-
-
-// ============================================================
-// 페이지 숨기기
-// ============================================================
-
-function hideAllPages() {
-
-    loginPage.hidden = true;
-
-    editorPage.hidden = true;
-
-    articlesPage.hidden = true;
-
-    viewPage.hidden = true;
-
-}
-
-
-// ============================================================
-// 로그인 페이지
-// ============================================================
-
-function showLogin() {
-
-    hideAllPages();
-
-    loginPage.hidden = false;
-
-}
-
-
-// ============================================================
-// 기사 작성 페이지
-// ============================================================
-
-function showEditor() {
-
-    if (!currentUser) {
-
-        alert(
-            "로그인이 필요합니다."
-        );
-
-        showLogin();
-
-        return;
-
-    }
-
-
-    hideAllPages();
-
-    editorPage.hidden = false;
-
-
-    updatePreview();
-
-}
-
-
-// ============================================================
-// 기사 목록 페이지
-// ============================================================
-
-async function showArticles() {
-
-    hideAllPages();
-
-    articlesPage.hidden = false;
-
-
-    await loadArticles();
-
-}
-
-
-// ============================================================
-// 회원가입
-// ============================================================
-
-async function registerUser() {
-
-    const nickname =
-        loginNickname.value.trim();
-
-    const password =
-        loginPassword.value;
-
-
-    if (!nickname || !password) {
-
-        alert(
-            "닉네임과 비밀번호를 입력하세요."
-        );
-
-        return;
-
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${API_URL}/register`,
-                {
-
-                    method: "POST",
-
-                    headers: {
-
-                        "Content-Type":
-                            "application/json"
-
-                    },
-
-                    body: JSON.stringify({
-
-                        nickname:
-                            nickname,
-
-                        password:
-                            password
-
-                    })
-
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.detail ||
-                "회원가입에 실패했습니다."
-            );
-
-        }
-
-
-        alert(
-            "회원가입이 완료되었습니다."
-        );
-
-
-        loginPassword.value = "";
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            error.message
-        );
-
-    }
-
-}
-
-
-// ============================================================
-// 로그인
-// ============================================================
-
-async function login() {
-
-    const nickname =
-        loginNickname.value.trim();
-
-    const password =
-        loginPassword.value;
-
-
-    if (!nickname || !password) {
-
-        alert(
-            "닉네임과 비밀번호를 입력하세요."
-        );
-
-        return;
-
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${API_URL}/login`,
-                {
-
-                    method: "POST",
-
-                    headers: {
-
-                        "Content-Type":
-                            "application/json"
-
-                    },
-
-                    body: JSON.stringify({
-
-                        nickname:
-                            nickname,
-
-                        password:
-                            password
-
-                    })
-
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.detail ||
-                "로그인에 실패했습니다."
-            );
-
-        }
-
-
-        currentUser =
-            data.user;
-
-
-        localStorage.setItem(
-            "fakepress_current_user",
-            JSON.stringify(
-                currentUser
-            )
-        );
-
-
-        localStorage.setItem(
-            "fakepress_token",
-            data.access_token
-        );
-
-
-        updateLoginUI();
-
-
-        loginNickname.value = "";
-
-        loginPassword.value = "";
-
-
-        alert(
-            "로그인되었습니다."
-        );
-
-
-        showEditor();
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            error.message
-        );
-
-    }
-
-}
-
-
-// ============================================================
-// 로그아웃
-// ============================================================
-
-function logout() {
-
-    currentUser = null;
-
-    editingId = null;
-
-    currentArticleId = null;
-
-    imageData = "";
-
-    imageUploading = false;
-
-
-    localStorage.removeItem(
-        "fakepress_current_user"
-    );
-
-
-    localStorage.removeItem(
-        "fakepress_token"
-    );
-
-
-    updateLoginUI();
-
-
-    showLogin();
-
-}
-
-
-// ============================================================
-// 이미지 업로드
-// ============================================================
-
-async function uploadImage(
-    file
-) {
-
-    if (!currentUser) {
-
-        throw new Error(
-            "로그인이 필요합니다."
-        );
-
-    }
-
+// =========================================================
+// IMAGE UPLOAD
+// =========================================================
+
+async function handleImageUpload(event) {
+    const file = event.target.files[0];
 
     if (!file) {
-
-        return "";
-
+        return;
     }
 
+    if (!currentUser || !token) {
+        alert("로그인이 필요합니다.");
 
-    if (
-        !file.type.startsWith(
-            "image/"
-        )
-    ) {
+        event.target.value = "";
+        return;
+    }
 
+    // 먼저 로컬 미리보기
+    const localUrl =
+        URL.createObjectURL(file);
+
+    const previewImage =
+        document.getElementById("previewImage");
+
+    if (previewImage) {
+        previewImage.src = localUrl;
+        previewImage.hidden = false;
+    }
+
+    try {
+        const uploadedUrl =
+            await uploadImage(file);
+
+        imageData = uploadedUrl;
+
+        if (previewImage) {
+            previewImage.src =
+                getImageUrl(imageData);
+        }
+
+    } catch (error) {
+        console.error(error);
+
+        alert(error.message);
+
+        event.target.value = "";
+        imageData = "";
+
+        if (previewImage) {
+            previewImage.src = "";
+            previewImage.hidden = true;
+        }
+    }
+}
+
+
+async function uploadImage(file) {
+    const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif"
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
         throw new Error(
-            "이미지 파일만 사용할 수 있습니다."
+            "JPG, PNG, WEBP, GIF 이미지만 업로드할 수 있습니다."
         );
-
     }
 
-
-    // 프론트에서도 10MB를 미리 검사
-    if (
-        file.size >
-        10 * 1024 * 1024
-    ) {
-
+    if (file.size > 10 * 1024 * 1024) {
         throw new Error(
             "이미지는 10MB 이하만 업로드할 수 있습니다."
         );
-
     }
 
-
-    const formData =
-        new FormData();
-
+    const formData = new FormData();
 
     formData.append(
         "file",
         file
     );
 
+    const response = await fetch(
+        `${API_URL}/upload-image`,
+        {
+            method: "POST",
 
-    imageUploading = true;
+            headers: {
+                Authorization: `Bearer ${token}`
+            },
 
-
-    try {
-
-        const response =
-            await fetch(
-                `${API_URL}/upload-image`,
-                {
-
-                    method: "POST",
-
-                    headers:
-                        getAuthHeaders(),
-
-                    body:
-                        formData
-
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.detail ||
-                "이미지 업로드에 실패했습니다."
-            );
-
+            body: formData
         }
+    );
 
+    const data = await response.json();
 
-        if (!data.image_url) {
-
-            throw new Error(
-                "서버에서 이미지 주소를 받지 못했습니다."
-            );
-
-        }
-
-
-        return data.image_url;
-
-
-    } finally {
-
-        imageUploading = false;
-
+    if (!response.ok) {
+        throw new Error(
+            data.detail ||
+            "이미지 업로드에 실패했습니다."
+        );
     }
 
+    return data.image_url;
 }
 
 
-// ============================================================
-// 기사 저장
-// ============================================================
+// =========================================================
+// SAVE ARTICLE
+// =========================================================
 
 async function saveArticle() {
-
-    if (!currentUser) {
-
-        alert(
-            "로그인이 필요합니다."
-        );
-
+    if (!currentUser || !token) {
+        alert("로그인이 필요합니다.");
         showLogin();
-
         return;
-
     }
-
-
-    if (imageUploading) {
-
-        alert(
-            "이미지 업로드가 끝날 때까지 기다려주세요."
-        );
-
-        return;
-
-    }
-
 
     const title =
-        titleInput.value.trim();
+        document.getElementById("title").value.trim();
 
     const subtitle =
-        subtitleInput.value.trim();
+        document.getElementById("subtitle").value;
 
     const author =
-        authorInput.value.trim();
+        document.getElementById("author").value;
 
     const date =
-        dateInput.value;
+        document.getElementById("date").value;
 
     const content =
-        contentInput.value;
-
-    const image =
-        imageData;
-
+        document.getElementById("content").value;
 
     if (!title) {
-
-        alert(
-            "기사 제목을 입력하세요."
-        );
-
-        titleInput.focus();
-
+        alert("기사 제목을 입력하세요.");
         return;
-
     }
 
-
     const articleData = {
-
-        title:
-            title,
-
-        subtitle:
-            subtitle,
-
-        author:
-            author,
-
-        date:
-            date,
-
-        content:
-            content,
-
-        image:
-            image
-
+        title,
+        subtitle,
+        author,
+        date,
+        content,
+        image: imageData || ""
     };
 
-
     try {
-
         let response;
 
+        if (editingArticleId) {
+            response = await fetch(
+                `${API_URL}/articles/${editingArticleId}`,
+                {
+                    method: "PUT",
 
-        if (editingId !== null) {
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...authHeaders()
+                    },
 
-            response =
-                await fetch(
-                    `${API_URL}/articles/${editingId}`,
-                    {
-
-                        method: "PUT",
-
-                        headers: {
-
-                            "Content-Type":
-                                "application/json",
-
-                            ...getAuthHeaders()
-
-                        },
-
-                        body:
-                            JSON.stringify(
-                                articleData
-                            )
-
-                    }
-                );
+                    body: JSON.stringify(articleData)
+                }
+            );
 
         } else {
+            response = await fetch(
+                `${API_URL}/articles`,
+                {
+                    method: "POST",
 
-            response =
-                await fetch(
-                    `${API_URL}/articles`,
-                    {
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...authHeaders()
+                    },
 
-                        method: "POST",
-
-                        headers: {
-
-                            "Content-Type":
-                                "application/json",
-
-                            ...getAuthHeaders()
-
-                        },
-
-                        body:
-                            JSON.stringify(
-                                articleData
-                            )
-
-                    }
-                );
-
+                    body: JSON.stringify(articleData)
+                }
+            );
         }
 
-
-        const data =
-            await response.json();
-
+        const data = await response.json();
 
         if (!response.ok) {
-
             throw new Error(
                 data.detail ||
                 "기사 저장에 실패했습니다."
             );
-
         }
-
-
-        if (editingId !== null) {
-
-            alert(
-                "기사가 수정되었습니다."
-            );
-
-        } else {
-
-            alert(
-                "기사가 저장되었습니다."
-            );
-
-        }
-
-
-        editingId = null;
-
-
-        editorTitle.textContent =
-            "기사 작성";
-
-
-        clearEditor();
-
-
-        await loadArticles();
-
-
-    } catch (error) {
-
-        console.error(error);
 
         alert(
-            error.message
+            editingArticleId
+                ? "기사가 수정되었습니다."
+                : "기사가 저장되었습니다."
         );
 
-    }
+        editingArticleId = null;
 
+        clearEditor();
+        await loadArticles();
+        showArticles();
+
+    } catch (error) {
+        console.error(error);
+        alert(error.message);
+    }
 }
 
 
-// ============================================================
-// 기사 전체 불러오기
-// ============================================================
+// =========================================================
+// LOAD ARTICLES
+// =========================================================
 
 async function loadArticles() {
-
     try {
+        const response = await fetch(
+            `${API_URL}/articles`
+        );
 
-        const response =
-            await fetch(
-                `${API_URL}/articles`
-            );
-
-
-        const data =
-            await response.json();
-
+        const data = await response.json();
 
         if (!response.ok) {
-
             throw new Error(
                 data.detail ||
-                "기사를 불러오지 못했습니다."
+                "기사 목록을 불러오지 못했습니다."
             );
-
         }
-
 
         articles = data;
 
-
-        renderArticles(
-            articles
-        );
-
+        renderArticles(articles);
 
     } catch (error) {
-
         console.error(error);
-
-        articleList.innerHTML = `
-
-            <div class="empty">
-
-                기사를 불러오지 못했습니다.
-
-                <br>
-
-                백엔드 서버가 실행 중인지 확인하세요.
-
-            </div>
-
-        `;
-
     }
-
 }
 
 
-// ============================================================
-// 기사 목록 렌더링
-// ============================================================
+// =========================================================
+// RENDER ARTICLE LIST
+// =========================================================
 
-function renderArticles(
-    articleArray
-) {
+function renderArticles(list) {
+    if (!articleList) {
+        return;
+    }
 
     articleList.innerHTML = "";
 
-
-    if (
-        !articleArray ||
-        articleArray.length === 0
-    ) {
-
-        articleList.innerHTML = `
-
-            <div class="empty">
-
-                등록된 기사가 없습니다.
-
-            </div>
-
-        `;
+    if (!list.length) {
+        articleList.innerHTML =
+            "<p>등록된 기사가 없습니다.</p>";
 
         return;
-
     }
 
+    list.forEach(article => {
+        const card =
+            document.createElement("div");
 
-    articleArray.forEach(
-        article => {
+        card.className = "article-card";
 
-            const card =
-                document.createElement(
-                    "div"
-                );
+        card.innerHTML = `
+            ${
+                article.image
+                    ? `
+                        <img
+                            src="${getImageUrl(article.image)}"
+                            class="news-image"
+                        >
+                    `
+                    : ""
+            }
 
+            <h2>${escapeHtml(article.title)}</h2>
 
-            card.className =
-                "article-card";
+            <h3>
+                ${escapeHtml(article.subtitle || "")}
+            </h3>
 
+            <p>
+                ${escapeHtml(article.author || "")}
+                ${article.author ? " 기자" : ""}
+            </p>
 
-            card.innerHTML = `
+            <p>
+                ${escapeHtml(article.date || "")}
+            </p>
 
-                <div class="article-info">
+            <button
+                onclick="viewArticle(${article.id})"
+            >
+                기사 보기
+            </button>
+        `;
 
-                    <h3>
-                        ${escapeHTML(
-                            article.title
-                        )}
-                    </h3>
-
-                    <p>
-                        ${escapeHTML(
-                            article.subtitle ||
-                            ""
-                        )}
-                    </p>
-
-                    <small>
-                        ${escapeHTML(
-                            article.author ||
-                            "기자"
-                        )}
-                        ·
-                        ${escapeHTML(
-                            article.date ||
-                            ""
-                        )}
-                        ·
-                        ${escapeHTML(
-                            article.owner_nickname ||
-                            ""
-                        )}
-                    </small>
-
-                </div>
-
-            `;
-
-
-            card.addEventListener(
-                "click",
-                () => {
-
-                    viewArticle(
-                        article.id
-                    );
-
-                }
-            );
-
-
-            articleList.appendChild(
-                card
-            );
-
-        }
-    );
-
+        articleList.appendChild(card);
+    });
 }
 
 
-// ============================================================
-// 기사 검색
-// ============================================================
+// =========================================================
+// SEARCH
+// =========================================================
 
 function searchArticles() {
-
     const keyword =
-        searchInput.value
+        document.getElementById("search")
+            .value
             .trim()
             .toLowerCase();
 
-
     if (!keyword) {
-
-        renderArticles(
-            articles
-        );
-
+        renderArticles(articles);
         return;
-
     }
 
-
     const filtered =
-        articles.filter(
-            article => {
+        articles.filter(article => {
+            return (
+                (article.title || "")
+                    .toLowerCase()
+                    .includes(keyword)
+                ||
+                (article.subtitle || "")
+                    .toLowerCase()
+                    .includes(keyword)
+                ||
+                (article.author || "")
+                    .toLowerCase()
+                    .includes(keyword)
+                ||
+                (article.content || "")
+                    .toLowerCase()
+                    .includes(keyword)
+            );
+        });
 
-                return (
-
-                    (article.title || "")
-                        .toLowerCase()
-                        .includes(keyword)
-
-                    ||
-
-                    (article.subtitle || "")
-                        .toLowerCase()
-                        .includes(keyword)
-
-                    ||
-
-                    (article.author || "")
-                        .toLowerCase()
-                        .includes(keyword)
-
-                    ||
-
-                    (article.content || "")
-                        .toLowerCase()
-                        .includes(keyword)
-
-                    ||
-
-                    (article.owner_nickname || "")
-                        .toLowerCase()
-                        .includes(keyword)
-
-                );
-
-            }
-        );
-
-
-    renderArticles(
-        filtered
-    );
-
+    renderArticles(filtered);
 }
 
 
-// ============================================================
-// 기사 상세 보기
-// ============================================================
+// =========================================================
+// VIEW ARTICLE
+// =========================================================
 
-async function viewArticle(
-    articleId
-) {
-
+async function viewArticle(id) {
     try {
-
-        const response =
-            await fetch(
-                `${API_URL}/articles/${articleId}`
-            );
-
+        const response = await fetch(
+            `${API_URL}/articles/${id}`
+        );
 
         const article =
             await response.json();
 
-
         if (!response.ok) {
-
             throw new Error(
                 article.detail ||
                 "기사를 불러오지 못했습니다."
             );
-
         }
 
-
-        currentArticleId =
-            article.id;
-
+        currentArticle = article;
 
         hideAllPages();
 
-        viewPage.hidden = false;
+        if (viewPage) {
+            viewPage.hidden = false;
+        }
 
-
-        viewTitle.textContent =
+        document.getElementById(
+            "viewTitle"
+        ).textContent =
             article.title || "";
 
-
-        viewSubtitle.textContent =
+        document.getElementById(
+            "viewSubtitle"
+        ).textContent =
             article.subtitle || "";
 
-
-        viewAuthor.textContent =
+        document.getElementById(
+            "viewAuthor"
+        ).textContent =
             article.author
                 ? `${article.author} 기자`
                 : "";
 
-
-        viewDate.textContent =
+        document.getElementById(
+            "viewDate"
+        ).textContent =
             article.date || "";
 
-
-        viewContent.textContent =
+        document.getElementById(
+            "viewContent"
+        ).textContent =
             article.content || "";
 
+        const viewImage =
+            document.getElementById(
+                "viewImage"
+            );
 
         if (article.image) {
-
             viewImage.src =
-                getImageUrl(
-                    article.image
-                );
+                getImageUrl(article.image);
 
             viewImage.hidden = false;
-
         } else {
-
             viewImage.src = "";
-
             viewImage.hidden = true;
-
         }
 
-
-        updateEditButton(
-            article
-        );
-
-
     } catch (error) {
-
         console.error(error);
-
-        alert(
-            error.message
-        );
-
+        alert(error.message);
     }
-
 }
 
 
-// ============================================================
-// 편집 버튼 상태
-// ============================================================
+// =========================================================
+// EDIT ARTICLE
+// =========================================================
 
-function updateEditButton(
-    article
-) {
-
-    const editButton =
-        document.querySelector(
-            ".edit-button"
-        );
-
-
-    if (!editButton) {
-
+function editCurrentArticle() {
+    if (!currentArticle) {
         return;
-
     }
-
 
     if (!currentUser) {
-
-        editButton.hidden = true;
-
+        alert("로그인이 필요합니다.");
         return;
-
     }
 
-
     const canEdit =
-        article.owner_id === currentUser.id
+        Number(currentArticle.owner_id) ===
+            Number(currentUser.id)
         ||
         Number(currentUser.is_admin) === 1;
 
+    if (!canEdit) {
+        alert("본인의 기사만 수정할 수 있습니다.");
+        return;
+    }
 
-    editButton.hidden =
-        !canEdit;
+    editingArticleId =
+        currentArticle.id;
 
+    hideAllPages();
+
+    editorPage.hidden = false;
+
+    document.getElementById("editorTitle")
+        .textContent = "기사 편집";
+
+    document.getElementById("title")
+        .value =
+        currentArticle.title || "";
+
+    document.getElementById("subtitle")
+        .value =
+        currentArticle.subtitle || "";
+
+    document.getElementById("author")
+        .value =
+        currentArticle.author || "";
+
+    document.getElementById("date")
+        .value =
+        currentArticle.date || "";
+
+    document.getElementById("content")
+        .value =
+        currentArticle.content || "";
+
+    imageData =
+        currentArticle.image || "";
+
+    const previewImage =
+        document.getElementById(
+            "previewImage"
+        );
+
+    if (imageData) {
+        previewImage.src =
+            getImageUrl(imageData);
+
+        previewImage.hidden = false;
+    } else {
+        previewImage.src = "";
+        previewImage.hidden = true;
+    }
+
+    const imageInput =
+        document.getElementById("image");
+
+    if (imageInput) {
+        imageInput.value = "";
+    }
+
+    updatePreview();
 }
 
 
-// ============================================================
-// 현재 기사 편집
-// ============================================================
+// =========================================================
+// DELETE ARTICLE
+// =========================================================
 
-async function editCurrentArticle() {
+async function deleteArticle(id) {
+    if (!currentUser || !token) {
+        alert("로그인이 필요합니다.");
+        return;
+    }
+
+    const article =
+        articles.find(
+            item => Number(item.id) === Number(id)
+        );
+
+    if (!article) {
+        return;
+    }
+
+    const canDelete =
+        Number(article.owner_id) ===
+            Number(currentUser.id)
+        ||
+        Number(currentUser.is_admin) === 1;
+
+    if (!canDelete) {
+        alert("본인의 기사만 삭제할 수 있습니다.");
+        return;
+    }
 
     if (
-        currentArticleId === null
-    ) {
-
-        return;
-
-    }
-
-
-    if (!currentUser) {
-
-        alert(
-            "로그인이 필요합니다."
-        );
-
-        showLogin();
-
-        return;
-
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${API_URL}/articles/${currentArticleId}`
-            );
-
-
-        const article =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                article.detail ||
-                "기사를 불러오지 못했습니다."
-            );
-
-        }
-
-
-        const canEdit =
-            article.owner_id === currentUser.id
-            ||
-            Number(currentUser.is_admin) === 1;
-
-
-        if (!canEdit) {
-
-            alert(
-                "본인의 기사만 편집할 수 있습니다."
-            );
-
-            return;
-
-        }
-
-
-        editingId =
-            article.id;
-
-
-        titleInput.value =
-            article.title || "";
-
-        subtitleInput.value =
-            article.subtitle || "";
-
-        authorInput.value =
-            article.author || "";
-
-        dateInput.value =
-            article.date || "";
-
-        contentInput.value =
-            article.content || "";
-
-
-        imageData =
-            article.image || "";
-
-
-        if (imageData) {
-
-            previewImage.src =
-                getImageUrl(
-                    imageData
-                );
-
-            previewImage.hidden =
-                false;
-
-        } else {
-
-            previewImage.src = "";
-
-            previewImage.hidden =
-                true;
-
-        }
-
-
-        // 기존 파일 선택값은 비움
-        // 기존 서버 이미지는 imageData로 유지
-        imageInput.value = "";
-
-
-        editorTitle.textContent =
-            "기사 편집";
-
-
-        hideAllPages();
-
-        editorPage.hidden = false;
-
-
-        updatePreview();
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            error.message
-        );
-
-    }
-
-}
-
-
-// ============================================================
-// 기사 삭제
-// ============================================================
-
-async function deleteArticle(
-    articleId
-) {
-
-    if (!currentUser) {
-
-        alert(
-            "로그인이 필요합니다."
-        );
-
-        return;
-
-    }
-
-
-    const confirmed =
-        confirm(
+        !confirm(
             "정말 이 기사를 삭제하시겠습니까?"
-        );
-
-
-    if (!confirmed) {
-
+        )
+    ) {
         return;
-
     }
 
-
     try {
-
-        const response =
-            await fetch(
-                `${API_URL}/articles/${articleId}`,
-                {
-
-                    method: "DELETE",
-
-                    headers:
-                        getAuthHeaders()
-
-                }
-            );
-
+        const response = await fetch(
+            `${API_URL}/articles/${id}`,
+            {
+                method: "DELETE",
+                headers: authHeaders()
+            }
+        );
 
         const data =
             await response.json();
 
-
         if (!response.ok) {
-
             throw new Error(
                 data.detail ||
                 "기사 삭제에 실패했습니다."
             );
-
         }
 
+        alert(data.message);
 
-        alert(
-            "기사가 삭제되었습니다."
-        );
-
-
-        currentArticleId =
-            null;
-
-
-        await showArticles();
-
+        await loadArticles();
+        showArticles();
 
     } catch (error) {
-
         console.error(error);
-
-        alert(
-            error.message
-        );
-
+        alert(error.message);
     }
-
 }
 
 
-// ============================================================
-// 새 기사
-// ============================================================
+// =========================================================
+// CLEAR EDITOR
+// =========================================================
 
 function clearEditor() {
-
-    editingId = null;
-
-
-    editorTitle.textContent =
-        "기사 작성";
-
-
-    titleInput.value = "";
-
-    subtitleInput.value = "";
-
-    authorInput.value = "";
-
-    contentInput.value = "";
-
-
-    imageInput.value = "";
-
-
+    editingArticleId = null;
     imageData = "";
 
-    imageUploading = false;
+    document.getElementById("editorTitle")
+        .textContent = "기사 작성";
 
+    document.getElementById("title")
+        .value = "";
 
-    previewImage.src = "";
+    document.getElementById("subtitle")
+        .value = "";
 
-    previewImage.hidden = true;
+    document.getElementById("author")
+        .value = "";
 
+    document.getElementById("date")
+        .value = "";
 
-    setToday();
+    document.getElementById("content")
+        .value = "";
+
+    const imageInput =
+        document.getElementById("image");
+
+    if (imageInput) {
+        imageInput.value = "";
+    }
+
+    const previewImage =
+        document.getElementById(
+            "previewImage"
+        );
+
+    if (previewImage) {
+        previewImage.src = "";
+        previewImage.hidden = true;
+    }
 
     updatePreview();
-
 }
 
 
-// ============================================================
-// 미리보기
-// ============================================================
+// =========================================================
+// PREVIEW
+// =========================================================
 
 function updatePreview() {
+    const title =
+        document.getElementById("title")
+            .value;
 
-    previewTitle.textContent =
-        titleInput.value ||
-        "기사 제목";
+    const subtitle =
+        document.getElementById("subtitle")
+            .value;
 
+    const author =
+        document.getElementById("author")
+            .value;
 
-    previewSubtitle.textContent =
-        subtitleInput.value ||
+    const date =
+        document.getElementById("date")
+            .value;
+
+    const content =
+        document.getElementById("content")
+            .value;
+
+    document.getElementById(
+        "previewTitle"
+    ).textContent =
+        title || "기사 제목";
+
+    document.getElementById(
+        "previewSubtitle"
+    ).textContent =
+        subtitle ||
         "기사 부제가 여기에 표시됩니다.";
 
-
-    previewAuthor.textContent =
-        authorInput.value
-            ? `${authorInput.value} 기자`
+    document.getElementById(
+        "previewAuthor"
+    ).textContent =
+        author
+            ? `${author} 기자`
             : "홍길동 기자";
 
+    document.getElementById(
+        "previewDate"
+    ).textContent =
+        date || "";
 
-    previewDate.textContent =
-        dateInput.value ||
-        "";
-
-
-    previewContent.textContent =
-        contentInput.value ||
+    document.getElementById(
+        "previewContent"
+    ).textContent =
+        content ||
         "기사 본문이 여기에 표시됩니다.";
-
-
-    if (imageData) {
-
-        previewImage.src =
-            getImageUrl(
-                imageData
-            );
-
-        previewImage.hidden =
-            false;
-
-    } else {
-
-        previewImage.src = "";
-
-        previewImage.hidden =
-            true;
-
-    }
-
 }
 
 
-// ============================================================
-// 이미지 업로드
-// ============================================================
+// =========================================================
+// LIVE PREVIEW
+// =========================================================
 
-imageInput.addEventListener(
-    "change",
-    async function () {
+[
+    "title",
+    "subtitle",
+    "author",
+    "date",
+    "content"
+].forEach(id => {
+    const element =
+        document.getElementById(id);
 
-        const file =
-            this.files[0];
-
-
-        if (!file) {
-
-            return;
-
-        }
-
-
-        try {
-
-            imageUploading = true;
-
-
-            // 업로드 전 미리보기
-            const localPreview =
-                URL.createObjectURL(
-                    file
-                );
-
-
-            previewImage.src =
-                localPreview;
-
-            previewImage.hidden =
-                false;
-
-
-            // 서버 업로드
-            const uploadedImage =
-                await uploadImage(
-                    file
-                );
-
-
-            imageData =
-                uploadedImage;
-
-
-            // 서버 주소로 다시 설정
-            previewImage.src =
-                getImageUrl(
-                    imageData
-                );
-
-
-            alert(
-                "이미지가 업로드되었습니다."
-            );
-
-
-        } catch (error) {
-
-            console.error(error);
-
-            alert(
-                error.message
-            );
-
-
-            imageData = "";
-
-            this.value = "";
-
-            previewImage.src = "";
-
-            previewImage.hidden = true;
-
-
-        } finally {
-
-            imageUploading = false;
-
-        }
-
-    }
-);
-
-
-// ============================================================
-// 실시간 미리보기
-// ============================================================
-
-titleInput.addEventListener(
-    "input",
-    updatePreview
-);
-
-subtitleInput.addEventListener(
-    "input",
-    updatePreview
-);
-
-authorInput.addEventListener(
-    "input",
-    updatePreview
-);
-
-dateInput.addEventListener(
-    "input",
-    updatePreview
-);
-
-contentInput.addEventListener(
-    "input",
-    updatePreview
-);
-
-
-// ============================================================
-// 오늘 날짜
-// ============================================================
-
-function setToday() {
-
-    if (dateInput.value) {
-
-        return;
-
+    if (element) {
+        element.addEventListener(
+            "input",
+            updatePreview
+        );
     }
 
-
-    const now =
-        new Date();
-
-
-    const year =
-        now.getFullYear();
-
-
-    const month =
-        String(
-            now.getMonth() + 1
-        ).padStart(
-            2,
-            "0"
+    if (element) {
+        element.addEventListener(
+            "change",
+            updatePreview
         );
+    }
+});
 
 
-    const day =
-        String(
-            now.getDate()
-        ).padStart(
-            2,
-            "0"
-        );
+// =========================================================
+// ESCAPE HTML
+// =========================================================
 
-
-    dateInput.value =
-        `${year}-${month}-${day}`;
-
-
-    previewDate.textContent =
-        dateInput.value;
-
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
 }
 
-
-// ============================================================
-// HTML 이스케이프
-// ============================================================
-
-function escapeHTML(
-    value
-) {
-
-    if (
-        value === null ||
-        value === undefined
-    ) {
-
-        return "";
-
-    }
-
-
-    return String(value)
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
-
-}
-
-
-// ============================================================
-// 시작
-// ============================================================
-
-loadCurrentUser();
-
-setToday();
-
-updatePreview();
