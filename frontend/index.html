@@ -2,36 +2,20 @@
 <html lang="ko">
 
 <head>
-
   <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FAKEPRESS</title>
-
-  <link
-    rel="stylesheet"
-    href="style.css"
-  >
-
+  <link rel="stylesheet" href="style.css">
 </head>
-
 
 <body>
 
-
 <header>
-
   <div class="logo">
     FAKEPRESS
   </div>
 
-
   <nav>
-
     <button onclick="showEditor()">
       기사 작성
     </button>
@@ -55,35 +39,17 @@
     >
       관리자
     </button>
-
   </nav>
-
 </header>
-
 
 <main class="container">
 
-
-  <!-- =========================
-       로그인
-  ========================== -->
-
-  <section
-    id="loginPage"
-    hidden
-  >
-
+  <!-- 로그인 -->
+  <section id="loginPage" hidden>
     <div class="login-box">
+      <h2>FAKEPRESS 로그인</h2>
 
-      <h2>
-        FAKEPRESS 로그인
-      </h2>
-
-
-      <label>
-        닉네임
-      </label>
-
+      <label>닉네임</label>
       <input
         id="loginNickname"
         type="text"
@@ -91,22 +57,16 @@
         maxlength="20"
       >
 
-
-      <label>
-        비밀번호
-      </label>
-
+      <label>비밀번호</label>
       <input
         id="loginPassword"
         type="password"
         placeholder="비밀번호"
       >
 
-
       <button onclick="login()">
         로그인
       </button>
-
 
       <button
         class="secondary"
@@ -114,83 +74,55 @@
       >
         회원가입
       </button>
-
     </div>
-
   </section>
 
-
-  <!-- =========================
-       기사 작성
-  ========================== -->
-
+  <!-- 기사 작성 -->
   <section id="editorPage">
-
     <div class="editor">
 
       <h2 id="editorTitle">
         기사 작성
       </h2>
 
-
-      <label>
-        제목
-      </label>
-
+      <label>제목</label>
       <input
         id="title"
         type="text"
         placeholder="기사 제목"
       >
 
-
-      <label>
-        부제
-      </label>
-
+      <label>부제</label>
       <input
         id="subtitle"
         type="text"
         placeholder="기사 부제"
       >
 
-
       <div class="row">
 
         <div>
-
-          <label>
-            기자명
-          </label>
+          <label>기자명</label>
 
           <input
             id="author"
             type="text"
             placeholder="홍길동"
           >
-
         </div>
 
-
         <div>
-
-          <label>
-            날짜
-          </label>
+          <label>날짜</label>
 
           <input
             id="date"
             type="date"
           >
-
         </div>
 
       </div>
 
-
-      <label>
-        이미지
-      </label>
+      <label>이미지</label>
 
       <input
         id="image"
@@ -198,21 +130,16 @@
         accept="image/*"
       >
 
-
-      <label>
-        본문
-      </label>
+      <label>본문</label>
 
       <textarea
         id="content"
         placeholder="기사 내용을 입력하세요"
       ></textarea>
 
-
       <button onclick="saveArticle()">
         기사 저장
       </button>
-
 
       <button
         class="secondary"
@@ -223,56 +150,36 @@
 
     </div>
 
-
-    <!-- =========================
-         미리보기
-    ========================== -->
-
     <div class="preview-area">
 
-      <h2>
-        미리보기
-      </h2>
-
+      <h2>미리보기</h2>
 
       <article id="news">
 
         <div class="news-header">
-
-          <span>
-            NEWS
-          </span>
-
+          <span>NEWS</span>
           <span id="previewDate"></span>
-
         </div>
-
 
         <h1 id="previewTitle">
           기사 제목
         </h1>
 
-
         <h3 id="previewSubtitle">
           기사 부제가 여기에 표시됩니다.
         </h3>
 
-
         <div class="author">
-
           <span id="previewAuthor">
             홍길동 기자
           </span>
-
         </div>
-
 
         <img
           id="previewImage"
           class="news-image"
           hidden
         >
-
 
         <div
           id="previewContent"
@@ -287,11 +194,7 @@
 
   </section>
 
-
-  <!-- =========================
-       기사 목록
-  ========================== -->
-
+  <!-- 기사 목록 -->
   <section
     id="articlesPage"
     hidden
@@ -299,10 +202,7 @@
 
     <div class="articles-header">
 
-      <h2>
-        전체 기사
-      </h2>
-
+      <h2>전체 기사</h2>
 
       <input
         id="search"
@@ -313,16 +213,11 @@
 
     </div>
 
-
     <div id="articleList"></div>
 
   </section>
 
-
-  <!-- =========================
-       기사 보기
-  ========================== -->
-
+  <!-- 기사 보기 -->
   <section
     id="viewPage"
     hidden
@@ -337,7 +232,6 @@
         ← 전체 기사
       </button>
 
-
       <button
         class="edit-button"
         onclick="editCurrentArticle()"
@@ -347,38 +241,26 @@
 
     </div>
 
-
     <article id="viewNews">
 
       <div class="news-header">
-
-        <span>
-          NEWS
-        </span>
-
+        <span>NEWS</span>
         <span id="viewDate"></span>
-
       </div>
-
 
       <h1 id="viewTitle"></h1>
 
       <h3 id="viewSubtitle"></h3>
 
-
       <div class="author">
-
         <span id="viewAuthor"></span>
-
       </div>
-
 
       <img
         id="viewImage"
         class="news-image"
         hidden
       >
-
 
       <div
         id="viewContent"
@@ -389,11 +271,7 @@
 
   </section>
 
-
-  <!-- =========================
-       로그인 사용자
-  ========================== -->
-
+  <!-- 로그인 사용자 -->
   <div
     id="userInfo"
     hidden
@@ -401,19 +279,15 @@
 
     <span id="loggedInUser"></span>
 
-
     <button onclick="logout()">
       로그아웃
     </button>
 
   </div>
 
-
 </main>
-
 
 <script src="script.js"></script>
 
 </body>
-
 </html>
