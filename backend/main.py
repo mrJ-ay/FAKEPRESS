@@ -12,15 +12,19 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.staticfiles import StaticFiles
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 from pwdlib import PasswordHash
+from supabase import create_client, Client
 
 from database import Base, engine, get_db
 from models import User, Article
+from schemas import (
+    RegisterRequest,
+    LoginRequest,
+    ArticleRequest,
+)
 
 
 # =========================================================
@@ -35,6 +39,33 @@ SECRET_KEY = os.getenv(
 ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
+
+
+# =========================================================
+# Supabase
+# =========================================================
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv(
+    "SUPABASE_SERVICE_ROLE_KEY"
+)
+
+if not SUPABASE_URL:
+    raise RuntimeError(
+        "SUPABASE_URL 환경변수가 설정되지 않았습니다."
+    )
+
+if not SUPABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError(
+        "SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다."
+    )
+
+supabase: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+)
+
+STORAGE_BUCKET = "article-images"
 
 
 # =========================================================
@@ -178,29 +209,6 @@ def get_admin_user(
 
 
 # =========================================================
-# Schemas
-# =========================================================
-
-class RegisterRequest(BaseModel):
-    nickname: str
-    password: str
-
-
-class LoginRequest(BaseModel):
-    nickname: str
-    password: str
-
-
-class ArticleRequest(BaseModel):
-    title: str
-    subtitle: str = ""
-    author: str = ""
-    date: str = ""
-    content: str = ""
-    image: str = ""
-
-
-# =========================================================
 # Root
 # =========================================================
 
@@ -340,21 +348,8 @@ def me(
 
 
 # =========================================================
-# Image Upload
+# Image Upload - Supabase Storage
 # =========================================================
-
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
-app.mount(
-    "/uploads",
-    StaticFiles(directory=str(UPLOAD_DIR)),
-    name="uploads",
-)
-
 
 @app.post("/upload-image")
 async def upload_image(
@@ -380,24 +375,54 @@ async def upload_image(
     if not extension:
         extension = ".jpg"
 
+    # 파일명 충돌 방지
     filename = (
         f"{uuid.uuid4().hex}"
         f"{extension}"
     )
 
-    file_path = UPLOAD_DIR / filename
+    # 사용자별 폴더
+    storage_path = (
+        f"{current_user.id}/{filename}"
+    )
 
-    contents = await file.read()
+    try:
+        contents = await file.read()
 
-    with open(
-        file_path,
-        "wb",
-    ) as f:
-        f.write(contents)
+        supabase.storage.from_(
+            STORAGE_BUCKET
+        ).upload(
+            storage_path,
+            contents,
+            {
+                "content-type": file.content_type,
+                "upsert": False,
+            },
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"이미지 업로드 실패: {str(e)}",
+        )
+
+    # Public URL 생성
+    try:
+        public_url = (
+            supabase.storage
+            .from_(STORAGE_BUCKET)
+            .get_public_url(storage_path)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"이미지 URL 생성 실패: {str(e)}",
+        )
 
     return {
         "message": "이미지 업로드 성공",
-        "url": f"/uploads/{filename}",
+        "url": public_url,
+        "path": storage_path,
     }
 
 
@@ -600,7 +625,7 @@ def delete_article(
             detail="삭제 권한이 없습니다.",
         )
 
-    # 이미지 파일은 일부러 삭제하지 않음.
+    # 현재는 Storage의 이미지 파일은 유지
     db.delete(article)
     db.commit()
 

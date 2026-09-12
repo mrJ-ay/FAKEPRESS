@@ -97,7 +97,8 @@ function showEditor() {
 
     showPage("editorPage");
 
-    const editorTitle = document.getElementById("editorTitle");
+    const editorTitle =
+        document.getElementById("editorTitle");
 
     if (editingArticle) {
         if (editorTitle) {
@@ -435,6 +436,40 @@ async function uploadImage(file) {
 
 
 // =========================================================
+// IMAGE URL
+// =========================================================
+
+function getImageUrl(image) {
+    if (!image) {
+        return "";
+    }
+
+    const value = String(image).trim();
+
+    if (!value) {
+        return "";
+    }
+
+    // 완전한 URL
+    if (
+        value.startsWith("http://") ||
+        value.startsWith("https://") ||
+        value.startsWith("data:")
+    ) {
+        return value;
+    }
+
+    // /uploads/xxx.jpg
+    if (value.startsWith("/")) {
+        return `${API_URL}${value}`;
+    }
+
+    // uploads/xxx.jpg
+    return `${API_URL}/${value}`;
+}
+
+
+// =========================================================
 // CREATE ARTICLE
 // =========================================================
 
@@ -737,6 +772,8 @@ async function loadArticlesForPage() {
             allArticles = [];
         }
 
+        console.log("불러온 기사:", allArticles);
+
         renderArticles(allArticles);
 
     } catch (error) {
@@ -792,10 +829,20 @@ function renderArticles(articles) {
         const date =
             article.date || "";
 
-        const image =
+        const rawImage =
             article.image_url ||
             article.image ||
             "";
+
+        const image =
+            getImageUrl(rawImage);
+
+        console.log(
+            "기사 이미지:",
+            rawImage,
+            "→",
+            image
+        );
 
         card.innerHTML = `
             ${
@@ -805,6 +852,7 @@ function renderArticles(articles) {
                             src="${escapeAttribute(image)}"
                             class="news-image"
                             alt=""
+                            loading="lazy"
                         >
                       `
                     : ""
@@ -956,10 +1004,20 @@ async function viewArticle(articleId) {
                 article.content || "";
         }
 
-        const imageUrl =
+        const rawImageUrl =
             article.image_url ||
             article.image ||
             "";
+
+        const imageUrl =
+            getImageUrl(rawImageUrl);
+
+        console.log(
+            "기사 보기 이미지:",
+            rawImageUrl,
+            "→",
+            imageUrl
+        );
 
         if (image && imageUrl) {
             image.src = imageUrl;
@@ -1129,6 +1187,8 @@ function updateImagePreview() {
         input.files?.[0];
 
     if (!file) {
+        preview.src = "";
+        preview.hidden = true;
         return;
     }
 
@@ -1373,6 +1433,7 @@ window.getCurrentUser = getCurrentUser;
 window.checkLogin = checkLogin;
 
 window.uploadImage = uploadImage;
+window.getImageUrl = getImageUrl;
 
 window.createArticle = createArticle;
 window.getArticles = getArticles;

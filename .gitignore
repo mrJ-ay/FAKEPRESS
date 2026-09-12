@@ -1,4 +1,4 @@
-backend/fakepress.db
-backend/uploads/*
 __pycache__/
 *.pyc
+uploads/
+.env
