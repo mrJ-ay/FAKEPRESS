@@ -648,9 +648,10 @@ async function saveArticle() {
             content
         };
 
-        // 이미지가 있을 때만 추가
+        // 중요:
+        // 백엔드 ArticleRequest는 image_url이 아니라 image를 사용함
         if (imageUrl) {
-            articleData.image_url = imageUrl;
+            articleData.image = imageUrl;
         }
 
         let result;
@@ -799,7 +800,7 @@ function renderArticles(articles) {
 
     if (!articles || articles.length === 0) {
         list.innerHTML =
-            "<p>등록된 기사가 없습니다.</p>";
+            "<p>등록된 기사가 없습니다.";
 
         return;
     }
