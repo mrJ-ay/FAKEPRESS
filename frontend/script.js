@@ -24,6 +24,7 @@ function setToken(token) {
 
 function removeToken() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("fakepress_current_user");
 }
 
 
@@ -347,6 +348,17 @@ async function checkLogin() {
             return null;
         }
 
+        // =====================================================
+        // 중요
+        // 현재 로그인한 사용자 정보를 localStorage에 저장
+        // 관리자 페이지에서 이 값을 사용함
+        // =====================================================
+
+        localStorage.setItem(
+            "fakepress_current_user",
+            JSON.stringify(user)
+        );
+
         if (loginButton) {
             loginButton.style.display = "none";
         }
@@ -450,7 +462,6 @@ function getImageUrl(image) {
         return "";
     }
 
-    // 완전한 URL
     if (
         value.startsWith("http://") ||
         value.startsWith("https://") ||
@@ -459,12 +470,10 @@ function getImageUrl(image) {
         return value;
     }
 
-    // /uploads/xxx.jpg
     if (value.startsWith("/")) {
         return `${API_URL}${value}`;
     }
 
-    // uploads/xxx.jpg
     return `${API_URL}/${value}`;
 }
 
@@ -630,7 +639,6 @@ async function saveArticle() {
             editingArticle?.image ||
             null;
 
-        // 새 이미지가 선택된 경우 업로드
         if (
             imageInput &&
             imageInput.files &&
@@ -648,8 +656,7 @@ async function saveArticle() {
             content
         };
 
-        // 중요:
-        // 백엔드 ArticleRequest는 image_url이 아니라 image를 사용함
+        // 백엔드 ArticleRequest는 image 사용
         if (imageUrl) {
             articleData.image = imageUrl;
         }
@@ -800,7 +807,7 @@ function renderArticles(articles) {
 
     if (!articles || articles.length === 0) {
         list.innerHTML =
-            "<p>등록된 기사가 없습니다.";
+            "<p>등록된 기사가 없습니다.</p>";
 
         return;
     }
@@ -1349,7 +1356,6 @@ document.addEventListener(
     "DOMContentLoaded",
     async function () {
 
-        // 오늘 날짜
         const date =
             document.getElementById("date");
 
@@ -1360,7 +1366,6 @@ document.addEventListener(
                     .split("T")[0];
         }
 
-        // 미리보기 이벤트
         const previewInputs = [
             "title",
             "subtitle",
