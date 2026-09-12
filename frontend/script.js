@@ -1,244 +1,60 @@
 
 // =========================================================
-// FAKEPRESS
+// FAKEPRESS SCRIPT
 // =========================================================
 
-// Render 프론트엔드와 백엔드 분리 배포
 const API_URL = "https://fakepress.onrender.com";
 
-
-// =========================================================
-// GLOBAL STATE
-// =========================================================
-
-let currentUser =
-    JSON.parse(localStorage.getItem("fakepress_user")) || null;
-
-let token =
-    localStorage.getItem("fakepress_token") || null;
-
-let articles = [];
-
-let currentArticle = null;
-let editingArticleId = null;
-let imageData = "";
+const TOKEN_KEY = "fakepress_token";
 
 
 // =========================================================
-// ELEMENTS
+// TOKEN
 // =========================================================
 
-const loginPage = document.getElementById("loginPage");
-const editorPage = document.getElementById("editorPage");
-const articlesPage = document.getElementById("articlesPage");
-const viewPage = document.getElementById("viewPage");
+function getToken() {
+    return localStorage.getItem(TOKEN_KEY);
+}
 
-const adminButton = document.getElementById("adminButton");
-const loginButton = document.getElementById("loginButton");
+function setToken(token) {
+    localStorage.setItem(TOKEN_KEY, token);
+}
 
-const userInfo = document.getElementById("userInfo");
-const loggedInUser = document.getElementById("loggedInUser");
-
-const articleList = document.getElementById("articleList");
-
-
-// =========================================================
-// INITIALIZE
-// =========================================================
-
-document.addEventListener("DOMContentLoaded", () => {
-    updateUI();
-    loadArticles();
-
-    const imageInput = document.getElementById("image");
-
-    if (imageInput) {
-        imageInput.addEventListener(
-            "change",
-            handleImageUpload
-        );
-    }
-});
-
-
-// =========================================================
-// AUTH UI
-// =========================================================
-
-function updateUI() {
-    if (currentUser) {
-        loginButton.textContent = "로그아웃";
-        loginButton.onclick = logout;
-
-        userInfo.hidden = false;
-
-        if (loggedInUser) {
-            loggedInUser.textContent =
-                `${currentUser.nickname}님`;
-        }
-
-        if (
-            adminButton &&
-            Number(currentUser.is_admin) === 1
-        ) {
-            adminButton.style.display = "inline-block";
-        } else if (adminButton) {
-            adminButton.style.display = "none";
-        }
-
-    } else {
-        loginButton.textContent = "로그인";
-        loginButton.onclick = showLogin;
-
-        userInfo.hidden = true;
-
-        if (adminButton) {
-            adminButton.style.display = "none";
-        }
-    }
+function removeToken() {
+    localStorage.removeItem(TOKEN_KEY);
 }
 
 
 // =========================================================
-// PAGE NAVIGATION
+// API RESPONSE
 // =========================================================
 
-function hideAllPages() {
-    if (loginPage) loginPage.hidden = true;
-    if (editorPage) editorPage.hidden = true;
-    if (articlesPage) articlesPage.hidden = true;
-    if (viewPage) viewPage.hidden = true;
-}
+async function parseResponse(response) {
+    const rawText = await response.text();
 
-function showLogin() {
-    hideAllPages();
+    let data = {};
 
-    if (loginPage) {
-        loginPage.hidden = false;
-    }
-}
-
-function showEditor() {
-    if (!currentUser) {
-        alert("로그인이 필요합니다.");
-        showLogin();
-        return;
-    }
-
-    hideAllPages();
-
-    if (editorPage) {
-        editorPage.hidden = false;
-    }
-}
-
-function showArticles() {
-    hideAllPages();
-
-    if (articlesPage) {
-        articlesPage.hidden = false;
-    }
-
-    loadArticles();
-}
-
-
-// =========================================================
-// LOGIN
-// =========================================================
-
-async function login() {
-    const nickname =
-        document.getElementById("loginNickname").value.trim();
-
-    const password =
-        document.getElementById("loginPassword").value;
-
-    if (!nickname || !password) {
-        alert("닉네임과 비밀번호를 입력하세요.");
-        return;
-    }
-
-    try {
-        const response = await fetch(
-            `${API_URL}/login`,
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    nickname,
-                    password
-                })
-            }
-        );
-
-        // JSON이라고 바로 가정하지 않고 텍스트로 받음
-        const rawText = await response.text();
-
-        console.log(
-            "LOGIN STATUS:",
-            response.status
-        );
-
-        console.log(
-            "LOGIN RESPONSE:",
-            rawText
-        );
-
-        let data = {};
-
-        if (rawText) {
-            try {
-                data = JSON.parse(rawText);
-            } catch (parseError) {
-                throw new Error(
-                    `서버 응답을 읽을 수 없습니다.\n\n` +
-                    `HTTP ${response.status}\n` +
-                    `${rawText}`
-                );
-            }
-        }
-
-        if (!response.ok) {
+    if (rawText) {
+        try {
+            data = JSON.parse(rawText);
+        } catch (error) {
             throw new Error(
-                data.detail ||
-                `로그인에 실패했습니다. (HTTP ${response.status})`
+                `서버 응답을 읽을 수 없습니다.\n\n` +
+                `HTTP ${response.status}\n` +
+                `${rawText}`
             );
         }
-
-        if (!data.access_token || !data.user) {
-            throw new Error(
-                "로그인 응답에 필요한 정보가 없습니다."
-            );
-        }
-
-        token = data.access_token;
-        currentUser = data.user;
-
-        localStorage.setItem(
-            "fakepress_token",
-            token
-        );
-
-        localStorage.setItem(
-            "fakepress_user",
-            JSON.stringify(currentUser)
-        );
-
-        updateUI();
-
-        alert("로그인되었습니다.");
-
-        showArticles();
-
-    } catch (error) {
-        console.error(error);
-        alert(error.message);
     }
+
+    if (!response.ok) {
+        throw new Error(
+            data.detail ||
+            data.message ||
+            `요청에 실패했습니다. (HTTP ${response.status})`
+        );
+    }
+
+    return data;
 }
 
 
@@ -260,7 +76,7 @@ async function registerUser() {
 
     try {
         const response = await fetch(
-            `${API_URL}/register`,
+            `${API_URL}/auth/register`,
             {
                 method: "POST",
 
@@ -275,30 +91,59 @@ async function registerUser() {
             }
         );
 
-        const rawText = await response.text();
+        const data = await parseResponse(response);
 
-        let data = {};
+        alert(data.message || "회원가입이 완료되었습니다.");
 
-        if (rawText) {
-            try {
-                data = JSON.parse(rawText);
-            } catch (error) {
-                throw new Error(
-                    `서버 응답을 읽을 수 없습니다.\n\n` +
-                    `HTTP ${response.status}\n` +
-                    `${rawText}`
-                );
+    } catch (error) {
+        console.error(error);
+        alert(error.message);
+    }
+}
+
+
+// =========================================================
+// LOGIN
+// =========================================================
+
+async function loginUser() {
+    const nickname =
+        document.getElementById("loginNickname").value.trim();
+
+    const password =
+        document.getElementById("loginPassword").value;
+
+    if (!nickname || !password) {
+        alert("닉네임과 비밀번호를 입력하세요.");
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/auth/login`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    nickname,
+                    password
+                })
             }
+        );
+
+        const data = await parseResponse(response);
+
+        if (data.access_token) {
+            setToken(data.access_token);
         }
 
-        if (!response.ok) {
-            throw new Error(
-                data.detail ||
-                "회원가입에 실패했습니다."
-            );
-        }
+        alert(data.message || "로그인되었습니다.");
 
-        alert(data.message);
+        await checkLogin();
 
     } catch (error) {
         console.error(error);
@@ -311,67 +156,112 @@ async function registerUser() {
 // LOGOUT
 // =========================================================
 
-function logout() {
-    currentUser = null;
-    token = null;
-
-    localStorage.removeItem(
-        "fakepress_token"
-    );
-
-    localStorage.removeItem(
-        "fakepress_user"
-    );
-
-    updateUI();
+function logoutUser() {
+    removeToken();
 
     alert("로그아웃되었습니다.");
 
-    showArticles();
+    location.reload();
 }
 
 
 // =========================================================
-// AUTH HEADER
+// CURRENT USER
 // =========================================================
 
-function authHeaders() {
-    return token
-        ? {
-            Authorization: `Bearer ${token}`
+async function getCurrentUser() {
+    const token = getToken();
+
+    if (!token) {
+        return null;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_URL}/auth/me`,
+            {
+                method: "GET",
+
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            removeToken();
+            return null;
         }
-        : {};
+
+        return await parseResponse(response);
+
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
 }
 
 
 // =========================================================
-// IMAGE URL
+// LOGIN STATE
 // =========================================================
 
-function getImageUrl(image) {
-    if (!image) {
-        return "";
-    }
+async function checkLogin() {
+    const user = await getCurrentUser();
 
-    // 기존 Base64 이미지
-    if (image.startsWith("data:")) {
-        return image;
-    }
+    const loginButton =
+        document.getElementById("loginButton");
 
-    // 이미 완전한 URL
-    if (
-        image.startsWith("http://") ||
-        image.startsWith("https://")
-    ) {
-        return image;
-    }
+    const logoutButton =
+        document.getElementById("logoutButton");
 
-    // /uploads/... 같은 서버 상대경로
-    return `${API_URL}${
-        image.startsWith("/")
-            ? ""
-            : "/"
-    }${image}`;
+    const userInfo =
+        document.getElementById("userInfo");
+
+    const adminButton =
+        document.getElementById("adminButton");
+
+    if (user) {
+
+        if (loginButton) {
+            loginButton.style.display = "none";
+        }
+
+        if (logoutButton) {
+            logoutButton.style.display = "block";
+        }
+
+        if (userInfo) {
+            userInfo.textContent =
+                `${user.nickname}님`;
+        }
+
+        if (adminButton) {
+            if (user.is_admin === 1) {
+                adminButton.style.display = "block";
+            } else {
+                adminButton.style.display = "none";
+            }
+        }
+
+    } else {
+
+        if (loginButton) {
+            loginButton.style.display = "block";
+        }
+
+        if (logoutButton) {
+            logoutButton.style.display = "none";
+        }
+
+        if (userInfo) {
+            userInfo.textContent = "";
+        }
+
+        if (adminButton) {
+            adminButton.style.display = "none";
+        }
+    }
 }
 
 
@@ -379,85 +269,16 @@ function getImageUrl(image) {
 // IMAGE UPLOAD
 // =========================================================
 
-async function handleImageUpload(event) {
-    const file = event.target.files[0];
-
-    if (!file) {
-        return;
-    }
-
-    if (!currentUser || !token) {
-        alert("로그인이 필요합니다.");
-
-        event.target.value = "";
-        return;
-    }
-
-    // 로컬 미리보기
-    const localUrl =
-        URL.createObjectURL(file);
-
-    const previewImage =
-        document.getElementById("previewImage");
-
-    if (previewImage) {
-        previewImage.src = localUrl;
-        previewImage.hidden = false;
-    }
-
-    try {
-        const uploadedUrl =
-            await uploadImage(file);
-
-        imageData = uploadedUrl;
-
-        if (previewImage) {
-            previewImage.src =
-                getImageUrl(imageData);
-        }
-
-    } catch (error) {
-        console.error(error);
-
-        alert(error.message);
-
-        event.target.value = "";
-        imageData = "";
-
-        if (previewImage) {
-            previewImage.src = "";
-            previewImage.hidden = true;
-        }
-    }
-}
-
-
 async function uploadImage(file) {
-    const allowedTypes = [
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-        "image/gif"
-    ];
+    const token = getToken();
 
-    if (!allowedTypes.includes(file.type)) {
-        throw new Error(
-            "JPG, PNG, WEBP, GIF 이미지만 업로드할 수 있습니다."
-        );
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-        throw new Error(
-            "이미지는 10MB 이하만 업로드할 수 있습니다."
-        );
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
     }
 
     const formData = new FormData();
 
-    formData.append(
-        "file",
-        file
-    );
+    formData.append("file", file);
 
     const response = await fetch(
         `${API_URL}/upload-image`,
@@ -465,474 +286,98 @@ async function uploadImage(file) {
             method: "POST",
 
             headers: {
-                Authorization: `Bearer ${token}`
+                "Authorization": `Bearer ${token}`
             },
 
             body: formData
         }
     );
 
-    const rawText = await response.text();
-
-    let data = {};
-
-    if (rawText) {
-        try {
-            data = JSON.parse(rawText);
-        } catch (error) {
-            throw new Error(
-                `이미지 업로드 서버 응답 오류\n\n` +
-                `HTTP ${response.status}\n` +
-                `${rawText}`
-            );
-        }
-    }
-
-    if (!response.ok) {
-        throw new Error(
-            data.detail ||
-            "이미지 업로드에 실패했습니다."
-        );
-    }
-
-    return data.image_url;
+    return await parseResponse(response);
 }
 
 
 // =========================================================
-// SAVE ARTICLE
+// CREATE ARTICLE
 // =========================================================
 
-async function saveArticle() {
-    if (!currentUser || !token) {
-        alert("로그인이 필요합니다.");
-        showLogin();
-        return;
+async function createArticle(articleData) {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
     }
 
-    const title =
-        document.getElementById("title").value.trim();
+    const response = await fetch(
+        `${API_URL}/articles`,
+        {
+            method: "POST",
 
-    const subtitle =
-        document.getElementById("subtitle").value;
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
 
-    const author =
-        document.getElementById("author").value;
-
-    const date =
-        document.getElementById("date").value;
-
-    const content =
-        document.getElementById("content").value;
-
-    if (!title) {
-        alert("기사 제목을 입력하세요.");
-        return;
-    }
-
-    const articleData = {
-        title,
-        subtitle,
-        author,
-        date,
-        content,
-        image: imageData || ""
-    };
-
-    try {
-        let response;
-
-        if (editingArticleId) {
-            response = await fetch(
-                `${API_URL}/articles/${editingArticleId}`,
-                {
-                    method: "PUT",
-
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...authHeaders()
-                    },
-
-                    body: JSON.stringify(articleData)
-                }
-            );
-
-        } else {
-            response = await fetch(
-                `${API_URL}/articles`,
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...authHeaders()
-                    },
-
-                    body: JSON.stringify(articleData)
-                }
-            );
+            body: JSON.stringify(articleData)
         }
+    );
 
-        const rawText = await response.text();
-
-        let data = {};
-
-        if (rawText) {
-            try {
-                data = JSON.parse(rawText);
-            } catch (error) {
-                throw new Error(
-                    `기사 저장 서버 응답 오류\n\n` +
-                    `HTTP ${response.status}\n` +
-                    `${rawText}`
-                );
-            }
-        }
-
-        if (!response.ok) {
-            throw new Error(
-                data.detail ||
-                "기사 저장에 실패했습니다."
-            );
-        }
-
-        alert(
-            editingArticleId
-                ? "기사가 수정되었습니다."
-                : "기사가 저장되었습니다."
-        );
-
-        editingArticleId = null;
-
-        clearEditor();
-        await loadArticles();
-        showArticles();
-
-    } catch (error) {
-        console.error(error);
-        alert(error.message);
-    }
+    return await parseResponse(response);
 }
 
 
 // =========================================================
-// LOAD ARTICLES
+// GET ARTICLES
 // =========================================================
 
-async function loadArticles() {
-    try {
-        const response = await fetch(
-            `${API_URL}/articles`
-        );
+async function getArticles() {
+    const response = await fetch(
+        `${API_URL}/articles`
+    );
 
-        const rawText = await response.text();
-
-        let data = [];
-
-        if (rawText) {
-            try {
-                data = JSON.parse(rawText);
-            } catch (error) {
-                throw new Error(
-                    `기사 목록 응답 오류\n\n` +
-                    `HTTP ${response.status}\n` +
-                    `${rawText}`
-                );
-            }
-        }
-
-        if (!response.ok) {
-            throw new Error(
-                data.detail ||
-                "기사 목록을 불러오지 못했습니다."
-            );
-        }
-
-        articles = data;
-
-        renderArticles(articles);
-
-    } catch (error) {
-        console.error(error);
-    }
+    return await parseResponse(response);
 }
 
 
 // =========================================================
-// RENDER ARTICLE LIST
+// GET ARTICLE
 // =========================================================
 
-function renderArticles(list) {
-    if (!articleList) {
-        return;
-    }
+async function getArticle(articleId) {
+    const response = await fetch(
+        `${API_URL}/articles/${articleId}`
+    );
 
-    articleList.innerHTML = "";
-
-    if (!list.length) {
-        articleList.innerHTML =
-            "<p>등록된 기사가 없습니다.</p>";
-
-        return;
-    }
-
-    list.forEach(article => {
-        const card =
-            document.createElement("div");
-
-        card.className = "article-card";
-
-        card.innerHTML = `
-            ${
-                article.image
-                    ? `
-                        <img
-                            src="${getImageUrl(article.image)}"
-                            class="news-image"
-                        >
-                    `
-                    : ""
-            }
-
-            <h2>${escapeHtml(article.title)}</h2>
-
-            <h3>
-                ${escapeHtml(article.subtitle || "")}
-            </h3>
-
-            <p>
-                ${escapeHtml(article.author || "")}
-                ${article.author ? " 기자" : ""}
-            </p>
-
-            <p>
-                ${escapeHtml(article.date || "")}
-            </p>
-
-            <button
-                onclick="viewArticle(${article.id})"
-            >
-                기사 보기
-            </button>
-        `;
-
-        articleList.appendChild(card);
-    });
+    return await parseResponse(response);
 }
 
 
 // =========================================================
-// SEARCH
+// UPDATE ARTICLE
 // =========================================================
 
-function searchArticles() {
-    const keyword =
-        document.getElementById("search")
-            .value
-            .trim()
-            .toLowerCase();
+async function updateArticle(articleId, articleData) {
+    const token = getToken();
 
-    if (!keyword) {
-        renderArticles(articles);
-        return;
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
     }
 
-    const filtered =
-        articles.filter(article => {
-            return (
-                (article.title || "")
-                    .toLowerCase()
-                    .includes(keyword)
-                ||
-                (article.subtitle || "")
-                    .toLowerCase()
-                    .includes(keyword)
-                ||
-                (article.author || "")
-                    .toLowerCase()
-                    .includes(keyword)
-                ||
-                (article.content || "")
-                    .toLowerCase()
-                    .includes(keyword)
-            );
-        });
+    const response = await fetch(
+        `${API_URL}/articles/${articleId}`,
+        {
+            method: "PUT",
 
-    renderArticles(filtered);
-}
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
 
-
-// =========================================================
-// VIEW ARTICLE
-// =========================================================
-
-async function viewArticle(id) {
-    try {
-        const response = await fetch(
-            `${API_URL}/articles/${id}`
-        );
-
-        const rawText = await response.text();
-
-        let article = {};
-
-        if (rawText) {
-            try {
-                article = JSON.parse(rawText);
-            } catch (error) {
-                throw new Error(
-                    `기사 응답 오류\n\n` +
-                    `HTTP ${response.status}\n` +
-                    `${rawText}`
-                );
-            }
+            body: JSON.stringify(articleData)
         }
+    );
 
-        if (!response.ok) {
-            throw new Error(
-                article.detail ||
-                "기사를 불러오지 못했습니다."
-            );
-        }
-
-        currentArticle = article;
-
-        hideAllPages();
-
-        if (viewPage) {
-            viewPage.hidden = false;
-        }
-
-        document.getElementById(
-            "viewTitle"
-        ).textContent =
-            article.title || "";
-
-        document.getElementById(
-            "viewSubtitle"
-        ).textContent =
-            article.subtitle || "";
-
-        document.getElementById(
-            "viewAuthor"
-        ).textContent =
-            article.author
-                ? `${article.author} 기자`
-                : "";
-
-        document.getElementById(
-            "viewDate"
-        ).textContent =
-            article.date || "";
-
-        document.getElementById(
-            "viewContent"
-        ).textContent =
-            article.content || "";
-
-        const viewImage =
-            document.getElementById(
-                "viewImage"
-            );
-
-        if (article.image) {
-            viewImage.src =
-                getImageUrl(article.image);
-
-            viewImage.hidden = false;
-        } else {
-            viewImage.src = "";
-            viewImage.hidden = true;
-        }
-
-    } catch (error) {
-        console.error(error);
-        alert(error.message);
-    }
-}
-
-
-// =========================================================
-// EDIT ARTICLE
-// =========================================================
-
-function editCurrentArticle() {
-    if (!currentArticle) {
-        return;
-    }
-
-    if (!currentUser) {
-        alert("로그인이 필요합니다.");
-        return;
-    }
-
-    const canEdit =
-        Number(currentArticle.owner_id) ===
-            Number(currentUser.id)
-        ||
-        Number(currentUser.is_admin) === 1;
-
-    if (!canEdit) {
-        alert("본인의 기사만 수정할 수 있습니다.");
-        return;
-    }
-
-    editingArticleId =
-        currentArticle.id;
-
-    hideAllPages();
-
-    editorPage.hidden = false;
-
-    document.getElementById("editorTitle")
-        .textContent = "기사 편집";
-
-    document.getElementById("title")
-        .value =
-        currentArticle.title || "";
-
-    document.getElementById("subtitle")
-        .value =
-        currentArticle.subtitle || "";
-
-    document.getElementById("author")
-        .value =
-        currentArticle.author || "";
-
-    document.getElementById("date")
-        .value =
-        currentArticle.date || "";
-
-    document.getElementById("content")
-        .value =
-        currentArticle.content || "";
-
-    imageData =
-        currentArticle.image || "";
-
-    const previewImage =
-        document.getElementById(
-            "previewImage"
-        );
-
-    if (imageData) {
-        previewImage.src =
-            getImageUrl(imageData);
-
-        previewImage.hidden = false;
-    } else {
-        previewImage.src = "";
-        previewImage.hidden = true;
-    }
-
-    const imageInput =
-        document.getElementById("image");
-
-    if (imageInput) {
-        imageInput.value = "";
-    }
-
-    updatePreview();
+    return await parseResponse(response);
 }
 
 
@@ -940,224 +385,214 @@ function editCurrentArticle() {
 // DELETE ARTICLE
 // =========================================================
 
-async function deleteArticle(id) {
-    if (!currentUser || !token) {
-        alert("로그인이 필요합니다.");
-        return;
+async function deleteArticle(articleId) {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
     }
 
-    const article =
-        articles.find(
-            item => Number(item.id) === Number(id)
-        );
+    const response = await fetch(
+        `${API_URL}/articles/${articleId}`,
+        {
+            method: "DELETE",
 
-    if (!article) {
-        return;
-    }
-
-    const canDelete =
-        Number(article.owner_id) ===
-            Number(currentUser.id)
-        ||
-        Number(currentUser.is_admin) === 1;
-
-    if (!canDelete) {
-        alert("본인의 기사만 삭제할 수 있습니다.");
-        return;
-    }
-
-    if (
-        !confirm(
-            "정말 이 기사를 삭제하시겠습니까?"
-        )
-    ) {
-        return;
-    }
-
-    try {
-        const response = await fetch(
-            `${API_URL}/articles/${id}`,
-            {
-                method: "DELETE",
-                headers: authHeaders()
-            }
-        );
-
-        const rawText = await response.text();
-
-        let data = {};
-
-        if (rawText) {
-            try {
-                data = JSON.parse(rawText);
-            } catch (error) {
-                throw new Error(
-                    `기사 삭제 서버 응답 오류\n\n` +
-                    `HTTP ${response.status}\n` +
-                    `${rawText}`
-                );
+            headers: {
+                "Authorization": `Bearer ${token}`
             }
         }
+    );
 
-        if (!response.ok) {
-            throw new Error(
-                data.detail ||
-                "기사 삭제에 실패했습니다."
-            );
+    return await parseResponse(response);
+}
+
+
+// =========================================================
+// ADMIN USERS
+// =========================================================
+
+async function getAdminUsers() {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
+    }
+
+    const response = await fetch(
+        `${API_URL}/admin/users`,
+        {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
         }
+    );
 
-        alert(data.message);
-
-        await loadArticles();
-        showArticles();
-
-    } catch (error) {
-        console.error(error);
-        alert(error.message);
-    }
+    return await parseResponse(response);
 }
 
 
 // =========================================================
-// CLEAR EDITOR
+// ADMIN MAKE ADMIN
 // =========================================================
 
-function clearEditor() {
-    editingArticleId = null;
-    imageData = "";
+async function makeAdmin(userId) {
+    const token = getToken();
 
-    document.getElementById("editorTitle")
-        .textContent = "기사 작성";
-
-    document.getElementById("title")
-        .value = "";
-
-    document.getElementById("subtitle")
-        .value = "";
-
-    document.getElementById("author")
-        .value = "";
-
-    document.getElementById("date")
-        .value = "";
-
-    document.getElementById("content")
-        .value = "";
-
-    const imageInput =
-        document.getElementById("image");
-
-    if (imageInput) {
-        imageInput.value = "";
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
     }
 
-    const previewImage =
-        document.getElementById(
-            "previewImage"
-        );
+    const response = await fetch(
+        `${API_URL}/admin/make-admin/${userId}`,
+        {
+            method: "POST",
 
-    if (previewImage) {
-        previewImage.src = "";
-        previewImage.hidden = true;
-    }
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        }
+    );
 
-    updatePreview();
+    return await parseResponse(response);
 }
 
 
 // =========================================================
-// PREVIEW
+// ADMIN REMOVE ADMIN
 // =========================================================
 
-function updatePreview() {
-    const title =
-        document.getElementById("title")
-            .value;
+async function removeAdmin(userId) {
+    const token = getToken();
 
-    const subtitle =
-        document.getElementById("subtitle")
-            .value;
-
-    const author =
-        document.getElementById("author")
-            .value;
-
-    const date =
-        document.getElementById("date")
-            .value;
-
-    const content =
-        document.getElementById("content")
-            .value;
-
-    document.getElementById(
-        "previewTitle"
-    ).textContent =
-        title || "기사 제목";
-
-    document.getElementById(
-        "previewSubtitle"
-    ).textContent =
-        subtitle ||
-        "기사 부제가 여기에 표시됩니다.";
-
-    document.getElementById(
-        "previewAuthor"
-    ).textContent =
-        author
-            ? `${author} 기자`
-            : "홍길동 기자";
-
-    document.getElementById(
-        "previewDate"
-    ).textContent =
-        date || "";
-
-    document.getElementById(
-        "previewContent"
-    ).textContent =
-        content ||
-        "기사 본문이 여기에 표시됩니다.";
-}
-
-
-// =========================================================
-// LIVE PREVIEW
-// =========================================================
-
-[
-    "title",
-    "subtitle",
-    "author",
-    "date",
-    "content"
-].forEach(id => {
-    const element =
-        document.getElementById(id);
-
-    if (element) {
-        element.addEventListener(
-            "input",
-            updatePreview
-        );
-
-        element.addEventListener(
-            "change",
-            updatePreview
-        );
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
     }
-});
 
+    const response = await fetch(
+        `${API_URL}/admin/remove-admin/${userId}`,
+        {
+            method: "POST",
 
-// =========================================================
-// ESCAPE HTML
-// =========================================================
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        }
+    );
 
-function escapeHtml(value) {
-    return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+    return await parseResponse(response);
 }
+
+
+// =========================================================
+// ADMIN BAN
+// =========================================================
+
+async function banUser(userId) {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
+    }
+
+    const response = await fetch(
+        `${API_URL}/admin/ban/${userId}`,
+        {
+            method: "POST",
+
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        }
+    );
+
+    return await parseResponse(response);
+}
+
+
+// =========================================================
+// ADMIN UNBAN
+// =========================================================
+
+async function unbanUser(userId) {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
+    }
+
+    const response = await fetch(
+        `${API_URL}/admin/unban/${userId}`,
+        {
+            method: "POST",
+
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        }
+    );
+
+    return await parseResponse(response);
+}
+
+
+// =========================================================
+// ADMIN ARTICLES
+// =========================================================
+
+async function getAdminArticles() {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
+    }
+
+    const response = await fetch(
+        `${API_URL}/admin/articles`,
+        {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        }
+    );
+
+    return await parseResponse(response);
+}
+
+
+// =========================================================
+// ADMIN DELETE ARTICLE
+// =========================================================
+
+async function adminDeleteArticle(articleId) {
+    const token = getToken();
+
+    if (!token) {
+        throw new Error("로그인이 필요합니다.");
+    }
+
+    const response = await fetch(
+        `${API_URL}/admin/articles/${articleId}`,
+        {
+            method: "DELETE",
+
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        }
+    );
+
+    return await parseResponse(response);
+}
+
+
+// =========================================================
+// INITIALIZE
+// =========================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    async function () {
+        await checkLogin();
+    }
+);
+
