@@ -1,9 +1,7 @@
 const API_URL = "https://fakepress.onrender.com";
 
 const token =
-    localStorage.getItem(
-        "fakepress_token"
-    );
+    localStorage.getItem("fakepress_token");
 
 const currentUser =
     JSON.parse(
@@ -13,701 +11,484 @@ const currentUser =
     );
 
 
-// ============================================================
-// 로그인 / 관리자 확인
-// ============================================================
+// =========================================================
+// 로그인 확인
+// =========================================================
 
 if (!token || !currentUser) {
-
     alert("로그인이 필요합니다.");
-
     location.href = "index.html";
-
 }
-
 else if (!currentUser.is_admin) {
-
     alert("관리자만 접근할 수 있습니다.");
-
     location.href = "index.html";
-
 }
-
 else {
-
     document.getElementById(
         "adminNickname"
     ).textContent =
         `${currentUser.nickname} 관리자`;
 
     loadUsers();
-
     loadArticles();
-
 }
 
 
-// ============================================================
+// =========================================================
 // 공통 헤더
-// ============================================================
+// =========================================================
 
 function getHeaders() {
-
     return {
-
-        "Content-Type":
-            "application/json",
-
-        "Authorization":
-            `Bearer ${token}`
-
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
     };
-
 }
 
 
-// ============================================================
+// =========================================================
 // 메시지
-// ============================================================
+// =========================================================
 
-function showMessage(
-    text
-) {
+function showMessage(message) {
+    const messageBox =
+        document.getElementById("message");
 
-    const message =
-        document.getElementById(
-            "message"
-        );
+    if (!messageBox) return;
 
-    message.textContent = text;
+    messageBox.textContent = message;
 
-    message.style.display = "block";
-
-    setTimeout(
-        () => {
-            message.style.display =
-                "none";
-        },
-        2000
-    );
-
+    setTimeout(() => {
+        messageBox.textContent = "";
+    }, 3000);
 }
 
 
-// ============================================================
-// 회원 목록
-// ============================================================
+// =========================================================
+// Users
+// =========================================================
 
 async function loadUsers() {
-
-    const container =
-        document.getElementById(
-            "userList"
+    try {
+        const response = await fetch(
+            `${API_URL}/admin/users`,
+            {
+                method: "GET",
+                headers: getHeaders()
+            }
         );
 
-    container.textContent =
-        "불러오는 중...";
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${API_URL}/admin/users`,
-                {
-                    headers:
-                        getHeaders()
-                }
-            );
-
+        const data = await response.json();
 
         if (!response.ok) {
-
-            const error =
-                await response.json();
-
             throw new Error(
-                error.detail ||
-                "회원 목록을 불러오지 못했습니다."
+                data.detail || "사용자 목록을 불러오지 못했습니다."
             );
-
         }
 
+        renderUsers(data);
 
-        const users =
-            await response.json();
-
-
-        if (users.length === 0) {
-
-            container.innerHTML =
-                `<div class="empty">
-                    등록된 회원이 없습니다.
-                </div>`;
-
-            return;
-
-        }
-
-
-        container.innerHTML = `
-
-            <table>
-
-                <thead>
-
-                    <tr>
-
-                        <th>ID</th>
-
-                        <th>닉네임</th>
-
-                        <th>상태</th>
-
-                        <th>가입일</th>
-
-                        <th>관리</th>
-
-                    </tr>
-
-                </thead>
-
-                <tbody>
-
-                    ${users.map(
-                        user => renderUser(user)
-                    ).join("")}
-
-                </tbody>
-
-            </table>
-
-        `;
-
-    }
-
-    catch (error) {
-
+    } catch (error) {
         console.error(error);
 
-        container.innerHTML =
-            `<div class="empty">
-                ${escapeHtml(error.message)}
-            </div>`;
-
+        showMessage(
+            error.message ||
+            "사용자 목록을 불러오는 중 오류가 발생했습니다."
+        );
     }
-
 }
 
 
-// ============================================================
-// 회원 한 명 렌더링
-// ============================================================
+// =========================================================
+// Render Users
+// =========================================================
 
-function renderUser(
-    user
-) {
+function renderUsers(users) {
+    const userList =
+        document.getElementById("userList");
 
-    let status = "";
+    if (!userList) return;
 
-    if (user.is_banned) {
-
-        status =
-            `<span class="status-banned">
-                정지됨
-            </span>`;
-
+    if (!users.length) {
+        userList.innerHTML =
+            "<p>등록된 사용자가 없습니다.</p>";
+        return;
     }
 
-    else if (user.is_admin) {
-
-        status =
-            `<span class="status-admin">
-                관리자
-            </span>`;
-
-    }
-
-    else {
-
-        status =
-            `<span class="status-normal">
-                정상
-            </span>`;
-
-    }
+    userList.innerHTML = users
+        .map(user => renderUser(user))
+        .join("");
+}
 
 
-    let buttons = "";
+// =========================================================
+// Render User
+// =========================================================
 
+function renderUser(user) {
+    const isAdmin =
+        Number(user.is_admin) === 1;
 
-    if (user.id === currentUser.id) {
-
-        buttons =
-            `<span>
-                현재 관리자
-            </span>`;
-
-    }
-
-    else {
-
-        const banButton =
-            user.is_banned
-
-                ? `
-                    <button
-                        class="unban"
-                        onclick="toggleBan(${user.id})"
-                    >
-                        정지 해제
-                    </button>
-                  `
-
-                : `
-                    <button
-                        class="ban"
-                        onclick="toggleBan(${user.id})"
-                    >
-                        정지
-                    </button>
-                  `;
-
-
-        const adminButton =
-            user.is_admin
-
-                ? `
-                    <button
-                        class="remove-admin"
-                        onclick="toggleAdmin(${user.id})"
-                    >
-                        관리자 해제
-                    </button>
-                  `
-
-                : `
-                    <button
-                        class="admin"
-                        onclick="toggleAdmin(${user.id})"
-                    >
-                        관리자 지정
-                    </button>
-                  `;
-
-
-        buttons =
-            banButton +
-            " " +
-            adminButton;
-
-    }
-
+    const isBanned =
+        Number(user.is_banned) === 1;
 
     return `
+        <div class="admin-user">
+            <div>
+                <strong>
+                    ${escapeHtml(user.nickname)}
+                </strong>
 
-        <tr>
+                <span>
+                    ID: ${user.id}
+                </span>
 
-            <td>${user.id}</td>
+                <span>
+                    ${
+                        isAdmin
+                            ? "관리자"
+                            : "일반 사용자"
+                    }
+                </span>
 
-            <td>
-                ${escapeHtml(user.nickname)}
-            </td>
+                <span>
+                    ${
+                        isBanned
+                            ? "🚫 정지됨"
+                            : "정상"
+                    }
+                </span>
+            </div>
 
-            <td>
-                ${status}
-            </td>
+            <div class="admin-user-buttons">
 
-            <td>
-                ${
-                    user.created_at
-                    ? new Date(
-                        user.created_at
-                      ).toLocaleString(
-                        "ko-KR"
-                      )
-                    : "-"
-                }
-            </td>
+                <button
+                    onclick="
+                        toggleBan(
+                            ${user.id},
+                            ${isBanned}
+                        )
+                    "
+                >
+                    ${
+                        isBanned
+                            ? "정지 해제"
+                            : "정지"
+                    }
+                </button>
 
-            <td>
-                ${buttons}
-            </td>
+                <button
+                    onclick="
+                        toggleAdmin(
+                            ${user.id},
+                            ${isAdmin}
+                        )
+                    "
+                >
+                    ${
+                        isAdmin
+                            ? "관리자 해제"
+                            : "관리자 지정"
+                    }
+                </button>
 
-        </tr>
-
+            </div>
+        </div>
     `;
-
 }
 
 
-// ============================================================
-// 회원 정지 / 해제
-// ============================================================
+// =========================================================
+// Ban / Unban
+// =========================================================
 
 async function toggleBan(
-    userId
+    userId,
+    isBanned
 ) {
-
-    if (
-        !confirm(
-            "이 회원의 정지 상태를 변경할까요?"
-        )
-    ) {
-        return;
-    }
-
-
     try {
 
-        const response =
-            await fetch(
-                `${API_URL}/admin/users/${userId}/ban`,
-                {
-                    method: "PUT",
-                    headers:
-                        getHeaders()
-                }
-            );
+        const endpoint = isBanned
+            ? `/admin/unban/${userId}`
+            : `/admin/ban/${userId}`;
 
+        const response = await fetch(
+            `${API_URL}${endpoint}`,
+            {
+                method: "POST",
+                headers: getHeaders()
+            }
+        );
 
         const data =
             await response.json();
 
-
         if (!response.ok) {
-
             throw new Error(
                 data.detail ||
-                "처리 실패"
+                "사용자 정지 처리에 실패했습니다."
             );
-
         }
 
+        showMessage(
+            data.message ||
+            (
+                isBanned
+                    ? "사용자 정지가 해제되었습니다."
+                    : "사용자가 정지되었습니다."
+            )
+        );
+
+        await loadUsers();
+
+    } catch (error) {
+        console.error(error);
 
         showMessage(
-            data.message
+            error.message ||
+            "사용자 정지 처리 중 오류가 발생했습니다."
         );
-
-        loadUsers();
-
     }
-
-    catch (error) {
-
-        alert(
-            error.message
-        );
-
-    }
-
 }
 
 
-// ============================================================
-// 관리자 권한 변경
-// ============================================================
+// =========================================================
+// Admin / Remove Admin
+// =========================================================
 
 async function toggleAdmin(
-    userId
+    userId,
+    isAdmin
 ) {
-
-    if (
-        !confirm(
-            "이 회원의 관리자 권한을 변경할까요?"
-        )
-    ) {
-        return;
-    }
-
-
     try {
 
-        const response =
-            await fetch(
-                `${API_URL}/admin/users/${userId}/admin`,
-                {
-                    method: "PUT",
-                    headers:
-                        getHeaders()
-                }
-            );
+        const endpoint = isAdmin
+            ? `/admin/remove-admin/${userId}`
+            : `/admin/make-admin/${userId}`;
 
+        const response = await fetch(
+            `${API_URL}${endpoint}`,
+            {
+                method: "POST",
+                headers: getHeaders()
+            }
+        );
 
         const data =
             await response.json();
 
-
         if (!response.ok) {
-
             throw new Error(
                 data.detail ||
-                "처리 실패"
+                "관리자 권한 처리에 실패했습니다."
             );
-
         }
 
+        showMessage(
+            data.message ||
+            (
+                isAdmin
+                    ? "관리자 권한이 제거되었습니다."
+                    : "관리자로 지정되었습니다."
+            )
+        );
+
+        await loadUsers();
+
+    } catch (error) {
+        console.error(error);
 
         showMessage(
-            data.message
+            error.message ||
+            "관리자 권한 처리 중 오류가 발생했습니다."
         );
-
-        loadUsers();
-
     }
-
-    catch (error) {
-
-        alert(
-            error.message
-        );
-
-    }
-
 }
 
 
-// ============================================================
-// 기사 목록
-// ============================================================
+// =========================================================
+// Articles
+// =========================================================
 
 async function loadArticles() {
-
-    const container =
-        document.getElementById(
-            "articleList"
-        );
-
-    container.textContent =
-        "불러오는 중...";
-
-
     try {
-
-        const response =
-            await fetch(
-                `${API_URL}/admin/articles`,
-                {
-                    headers:
-                        getHeaders()
-                }
-            );
-
+        const response = await fetch(
+            `${API_URL}/admin/articles`,
+            {
+                method: "GET",
+                headers: getHeaders()
+            }
+        );
 
         const data =
             await response.json();
 
-
         if (!response.ok) {
-
             throw new Error(
                 data.detail ||
                 "기사 목록을 불러오지 못했습니다."
             );
-
         }
 
+        renderArticles(data);
 
-        if (data.length === 0) {
-
-            container.innerHTML =
-                `<div class="empty">
-                    등록된 기사가 없습니다.
-                </div>`;
-
-            return;
-
-        }
-
-
-        container.innerHTML =
-            data.map(
-                article =>
-                    renderArticle(
-                        article
-                    )
-            ).join("");
-
-    }
-
-    catch (error) {
-
+    } catch (error) {
         console.error(error);
 
-        container.innerHTML =
-            `<div class="empty">
-                ${escapeHtml(error.message)}
-            </div>`;
+        showMessage(
+            error.message ||
+            "기사 목록을 불러오는 중 오류가 발생했습니다."
+        );
+    }
+}
 
+
+// =========================================================
+// Render Articles
+// =========================================================
+
+function renderArticles(articles) {
+    const articleList =
+        document.getElementById("articleList");
+
+    if (!articleList) return;
+
+    if (!articles.length) {
+        articleList.innerHTML =
+            "<p>등록된 기사가 없습니다.</p>";
+        return;
     }
 
+    articleList.innerHTML = articles
+        .map(article => renderArticle(article))
+        .join("");
 }
 
 
-// ============================================================
-// 기사 렌더링
-// ============================================================
+// =========================================================
+// Render Article
+// =========================================================
 
-function renderArticle(
-    article
-) {
+function renderArticle(article) {
 
     return `
-
-        <div class="article-row">
-
-            <div class="article-info">
-
-                <div class="article-title">
-
-                    ${escapeHtml(
-                        article.title
-                    )}
-
-                </div>
-
-                <div class="article-meta">
-
-                    ID:
-                    ${article.id}
-
-                    · 작성자:
-                    ${escapeHtml(
-                        article.owner_nickname
-                    )}
-
-                    · 기자:
-                    ${escapeHtml(
-                        article.author || "-"
-                    )}
-
-                    · 날짜:
-                    ${escapeHtml(
-                        article.date || "-"
-                    )}
-
-                </div>
-
-            </div>
-
+        <div class="admin-article">
 
             <div>
+                <h3>
+                    ${escapeHtml(article.title)}
+                </h3>
 
-                <button
-                    class="delete"
-                    onclick="deleteArticle(${article.id})"
-                >
-                    삭제
-                </button>
+                ${
+                    article.subtitle
+                        ? `
+                            <p>
+                                ${escapeHtml(
+                                    article.subtitle
+                                )}
+                            </p>
+                          `
+                        : ""
+                }
 
+                <small>
+                    작성자:
+                    ${escapeHtml(
+                        article.author || "알 수 없음"
+                    )}
+                </small>
+
+                <br>
+
+                <small>
+                    ID:
+                    ${article.id}
+                </small>
             </div>
 
+            <button
+                onclick="
+                    deleteArticle(
+                        ${article.id}
+                    )
+                "
+            >
+                기사 삭제
+            </button>
+
         </div>
-
     `;
-
 }
 
 
-// ============================================================
-// 기사 삭제
-// ============================================================
+// =========================================================
+// Delete Article
+// =========================================================
 
 async function deleteArticle(
     articleId
 ) {
-
     if (
         !confirm(
-            "정말 이 기사를 삭제할까요?"
+            "정말 이 기사를 삭제하시겠습니까?"
         )
     ) {
         return;
     }
 
-
     try {
 
-        const response =
-            await fetch(
-                `${API_URL}/articles/${articleId}`,
-                {
-                    method: "DELETE",
-                    headers:
-                        getHeaders()
-                }
-            );
-
+        const response = await fetch(
+            `${API_URL}/admin/articles/${articleId}`,
+            {
+                method: "DELETE",
+                headers: getHeaders()
+            }
+        );
 
         const data =
             await response.json();
 
-
         if (!response.ok) {
-
             throw new Error(
                 data.detail ||
-                "기사 삭제 실패"
+                "기사 삭제에 실패했습니다."
             );
-
         }
 
+        showMessage(
+            data.message ||
+            "기사가 삭제되었습니다."
+        );
+
+        await loadArticles();
+
+    } catch (error) {
+        console.error(error);
 
         showMessage(
-            data.message
+            error.message ||
+            "기사 삭제 중 오류가 발생했습니다."
         );
-
-        loadArticles();
-
     }
-
-    catch (error) {
-
-        alert(
-            error.message
-        );
-
-    }
-
 }
 
 
-// ============================================================
-// HTML 이스케이프
-// ============================================================
+// =========================================================
+// HTML Escape
+// =========================================================
 
-function escapeHtml(
-    value
-) {
+function escapeHtml(value) {
 
-    if (
-        value === null ||
-        value === undefined
-    ) {
+    if (value === null ||
+        value === undefined) {
         return "";
     }
 
-
     return String(value)
-        .replaceAll(
-            "&",
-            "&amp;"
-        )
-        .replaceAll(
-            "<",
-            "&lt;"
-        )
-        .replaceAll(
-            ">",
-            "&gt;"
-        )
-        .replaceAll(
-            '"',
-            "&quot;"
-        )
-        .replaceAll(
-            "'",
-            "&#039;"
-        );
-
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
