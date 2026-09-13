@@ -20,6 +20,7 @@
 
         body {
             margin: 0;
+
             font-family:
                 Arial,
                 "Malgun Gothic",
@@ -32,6 +33,7 @@
         header {
             background: #111;
             color: white;
+
             padding: 20px 30px;
 
             display: flex;
@@ -51,18 +53,24 @@
 
         main {
             max-width: 1100px;
+
             margin: 30px auto;
+
             padding: 0 20px;
         }
 
         .section {
             background: white;
+
             border-radius: 12px;
+
             padding: 22px;
+
             margin-bottom: 25px;
 
             box-shadow:
-                0 3px 12px rgba(0, 0, 0, 0.08);
+                0 3px 12px
+                rgba(0, 0, 0, 0.08);
         }
 
         .section h2 {
@@ -71,17 +79,35 @@
 
         .toolbar {
             display: flex;
+
             justify-content: space-between;
             align-items: center;
+
             margin-bottom: 15px;
+
+            gap: 10px;
+        }
+
+        .toolbar > div {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         button {
             border: 0;
+
             border-radius: 8px;
+
             padding: 9px 13px;
+
             cursor: pointer;
+
             font-weight: bold;
+        }
+
+        button:hover {
+            opacity: 0.85;
         }
 
         .refresh {
@@ -127,7 +153,10 @@
         th,
         td {
             padding: 12px;
-            border-bottom: 1px solid #eee;
+
+            border-bottom:
+                1px solid #eee;
+
             text-align: left;
         }
 
@@ -157,31 +186,43 @@
 
         .article-row {
             display: flex;
+
             justify-content: space-between;
             align-items: center;
 
-            border-bottom: 1px solid #eee;
+            border-bottom:
+                1px solid #eee;
+
             padding: 15px 0;
+
             gap: 20px;
         }
 
         .article-info {
             flex: 1;
+            min-width: 0;
         }
 
         .article-title {
             font-size: 17px;
+
             font-weight: bold;
+
             margin-bottom: 5px;
+
+            word-break: break-word;
         }
 
         .article-meta {
             font-size: 13px;
             color: #777;
+
+            word-break: break-word;
         }
 
         #message {
             position: fixed;
+
             bottom: 25px;
             right: 25px;
 
@@ -193,6 +234,51 @@
             border-radius: 8px;
 
             display: none;
+
+            z-index: 9999;
+        }
+
+        @media (max-width: 700px) {
+
+            header {
+                padding: 16px 20px;
+            }
+
+            header h1 {
+                font-size: 20px;
+            }
+
+            main {
+                margin: 20px auto;
+                padding: 0 12px;
+            }
+
+            .section {
+                padding: 16px;
+            }
+
+            .toolbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .toolbar > div {
+                width: 100%;
+            }
+
+            .toolbar button {
+                flex: 1;
+            }
+
+            .article-row {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .article-row > button {
+                width: 100%;
+            }
+
         }
 
     </style>
@@ -213,6 +299,10 @@
 
 
 <main>
+
+    <!-- =====================================================
+         회원 관리
+    ====================================================== -->
 
     <div class="section">
 
@@ -236,18 +326,33 @@
     </div>
 
 
+    <!-- =====================================================
+         기사 관리
+    ====================================================== -->
+
     <div class="section">
 
         <div class="toolbar">
 
             <h2>기사 관리</h2>
 
-            <button
-                class="refresh"
-                onclick="loadArticles()"
-            >
-                새로고침
-            </button>
+            <div>
+
+                <button
+                    class="delete"
+                    onclick="deleteAllArticles()"
+                >
+                    🗑️ 뉴스 전체삭제
+                </button>
+
+                <button
+                    class="refresh"
+                    onclick="loadArticles()"
+                >
+                    새로고침
+                </button>
+
+            </div>
 
         </div>
 
@@ -257,6 +362,10 @@
 
     </div>
 
+
+    <!-- =====================================================
+         돌아가기
+    ====================================================== -->
 
     <div class="section">
 

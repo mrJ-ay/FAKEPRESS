@@ -1309,3 +1309,35 @@ def admin_delete_article(
     return {
         "message": "기사가 삭제되었습니다."
     }
+
+
+# =========================================================
+# ADMIN DELETE ALL ARTICLES
+# =========================================================
+
+@app.delete("/admin/articles")
+def admin_delete_all_articles(
+    admin: User = Depends(
+        get_admin_user
+    ),
+    db: Session = Depends(get_db),
+):
+    # 모든 댓글 먼저 삭제
+    db.query(Comment).delete(
+        synchronize_session=False
+    )
+
+    # 모든 기사 삭제
+    deleted_count = (
+        db.query(Article).delete(
+            synchronize_session=False
+        )
+    )
+
+    db.commit()
+
+    return {
+        "message":
+            f"모든 뉴스가 삭제되었습니다. "
+            f"({deleted_count}개 삭제)"
+    }

@@ -57,9 +57,11 @@ function showMessage(message) {
     if (!messageBox) return;
 
     messageBox.textContent = message;
+    messageBox.style.display = "block";
 
     setTimeout(() => {
         messageBox.textContent = "";
+        messageBox.style.display = "none";
     }, 3000);
 }
 
@@ -82,7 +84,8 @@ async function loadUsers() {
 
         if (!response.ok) {
             throw new Error(
-                data.detail || "사용자 목록을 불러오지 못했습니다."
+                data.detail ||
+                "사용자 목록을 불러오지 못했습니다."
             );
         }
 
@@ -111,7 +114,7 @@ function renderUsers(users) {
 
     if (!users.length) {
         userList.innerHTML =
-            "<p>등록된 사용자가 없습니다.</p>";
+            "<p class='empty'>등록된 사용자가 없습니다.</p>";
         return;
     }
 
@@ -133,36 +136,51 @@ function renderUser(user) {
         Number(user.is_banned) === 1;
 
     return `
-        <div class="admin-user">
-            <div>
-                <strong>
+        <div class="article-row">
+
+            <div class="article-info">
+
+                <div class="article-title">
                     ${escapeHtml(user.nickname)}
-                </strong>
+                </div>
 
-                <span>
-                    ID: ${user.id}
-                </span>
+                <div class="article-meta">
 
-                <span>
+                    ID:
+                    ${user.id}
+
+                    &nbsp; | &nbsp;
+
                     ${
                         isAdmin
-                            ? "관리자"
+                            ? '<span class="status-admin">관리자</span>'
                             : "일반 사용자"
                     }
-                </span>
 
-                <span>
+                    &nbsp; | &nbsp;
+
                     ${
                         isBanned
-                            ? "🚫 정지됨"
-                            : "정상"
+                            ? '<span class="status-banned">🚫 정지됨</span>'
+                            : '<span class="status-normal">정상</span>'
                     }
-                </span>
+
+                </div>
+
             </div>
 
-            <div class="admin-user-buttons">
+            <div style="
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            ">
 
                 <button
+                    class="${
+                        isBanned
+                            ? "unban"
+                            : "ban"
+                    }"
                     onclick="
                         toggleBan(
                             ${user.id},
@@ -178,6 +196,11 @@ function renderUser(user) {
                 </button>
 
                 <button
+                    class="${
+                        isAdmin
+                            ? "remove-admin"
+                            : "admin"
+                    }"
                     onclick="
                         toggleAdmin(
                             ${user.id},
@@ -193,6 +216,7 @@ function renderUser(user) {
                 </button>
 
             </div>
+
         </div>
     `;
 }
@@ -355,7 +379,7 @@ function renderArticles(articles) {
 
     if (!articles.length) {
         articleList.innerHTML =
-            "<p>등록된 기사가 없습니다.</p>";
+            "<p class='empty'>등록된 기사가 없습니다.</p>";
         return;
     }
 
@@ -372,41 +396,44 @@ function renderArticles(articles) {
 function renderArticle(article) {
 
     return `
-        <div class="admin-article">
+        <div class="article-row">
 
-            <div>
-                <h3>
+            <div class="article-info">
+
+                <div class="article-title">
                     ${escapeHtml(article.title)}
-                </h3>
+                </div>
 
                 ${
                     article.subtitle
                         ? `
-                            <p>
+                            <div class="article-meta">
                                 ${escapeHtml(
                                     article.subtitle
                                 )}
-                            </p>
+                            </div>
                           `
                         : ""
                 }
 
-                <small>
+                <div class="article-meta">
+
                     작성자:
                     ${escapeHtml(
                         article.author || "알 수 없음"
                     )}
-                </small>
 
-                <br>
+                    &nbsp; | &nbsp;
 
-                <small>
                     ID:
                     ${article.id}
-                </small>
+
+                </div>
+
             </div>
 
             <button
+                class="delete"
                 onclick="
                     deleteArticle(
                         ${article.id}
@@ -475,20 +502,98 @@ async function deleteArticle(
 
 
 // =========================================================
+// Delete All Articles
+// =========================================================
+
+async function deleteAllArticles() {
+
+    if (
+        !confirm(
+            "⚠️ 정말 모든 뉴스를 삭제하시겠습니까?\n\n삭제한 뉴스는 복구할 수 없습니다."
+        )
+    ) {
+        return;
+    }
+
+    if (
+        !confirm(
+            "마지막 확인입니다.\n\n모든 뉴스를 전부 삭제합니다."
+        )
+    ) {
+        return;
+    }
+
+    try {
+
+        const response = await fetch(
+            `${API_URL}/admin/articles`,
+            {
+                method: "DELETE",
+                headers: getHeaders()
+            }
+        );
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail ||
+                "전체 뉴스 삭제에 실패했습니다."
+            );
+        }
+
+        showMessage(
+            data.message ||
+            "모든 뉴스가 삭제되었습니다."
+        );
+
+        await loadArticles();
+
+    } catch (error) {
+
+        console.error(error);
+
+        showMessage(
+            error.message ||
+            "전체 뉴스 삭제 중 오류가 발생했습니다."
+        );
+    }
+}
+
+
+// =========================================================
 // HTML Escape
 // =========================================================
 
 function escapeHtml(value) {
 
-    if (value === null ||
-        value === undefined) {
+    if (
+        value === null ||
+        value === undefined
+    ) {
         return "";
     }
 
     return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
