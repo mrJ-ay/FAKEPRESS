@@ -1,18 +1,9 @@
-// =========================================================
-// FAKEPRESS - script.js
-// =========================================================
-
 const API_URL = "https://fakepress.onrender.com";
 const TOKEN_KEY = "fakepress_token";
 
 let allArticles = [];
 let currentArticleId = null;
 let editingArticle = null;
-
-
-// =========================================================
-// TOKEN
-// =========================================================
 
 function getToken() {
     return localStorage.getItem(TOKEN_KEY);
@@ -26,11 +17,6 @@ function removeToken() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem("fakepress_current_user");
 }
-
-
-// =========================================================
-// RESPONSE
-// =========================================================
 
 async function parseResponse(response) {
     let data = null;
@@ -53,11 +39,6 @@ async function parseResponse(response) {
     return data;
 }
 
-
-// =========================================================
-// PAGE NAVIGATION
-// =========================================================
-
 function showPage(pageId) {
     const pages = [
         "loginPage",
@@ -75,19 +56,9 @@ function showPage(pageId) {
     });
 }
 
-
-// =========================================================
-// LOGIN PAGE
-// =========================================================
-
 function showLogin() {
     showPage("loginPage");
 }
-
-
-// =========================================================
-// EDITOR PAGE
-// =========================================================
 
 function showEditor() {
     if (!getToken()) {
@@ -114,14 +85,8 @@ function showEditor() {
     updatePreview();
 }
 
-
-// =========================================================
-// ARTICLES PAGE
-// =========================================================
-
 async function showArticles() {
     showPage("articlesPage");
-
     await loadArticlesForPage();
 }
 
@@ -163,7 +128,6 @@ async function registerUser() {
             data?.message ||
             "회원가입이 완료되었습니다."
         );
-
     } catch (error) {
         console.error(error);
         alert(error.message);
@@ -330,7 +294,8 @@ async function checkLogin() {
     }
 
     try {
-        const user = await getCurrentUser();
+        const user =
+            await getCurrentUser();
 
         if (!user) {
             if (loginButton) {
@@ -347,12 +312,6 @@ async function checkLogin() {
 
             return null;
         }
-
-        // =====================================================
-        // 중요
-        // 현재 로그인한 사용자 정보를 localStorage에 저장
-        // 관리자 페이지에서 이 값을 사용함
-        // =====================================================
 
         localStorage.setItem(
             "fakepress_current_user",
@@ -374,7 +333,7 @@ async function checkLogin() {
 
         if (adminButton) {
             const isAdmin =
-                user.is_admin === 1 ||
+                Number(user.is_admin) === 1 ||
                 user.is_admin === true;
 
             adminButton.style.display =
@@ -435,7 +394,8 @@ async function uploadImage(file) {
         }
     );
 
-    const data = await parseResponse(response);
+    const data =
+        await parseResponse(response);
 
     return (
         data?.url ||
@@ -456,7 +416,8 @@ function getImageUrl(image) {
         return "";
     }
 
-    const value = String(image).trim();
+    const value =
+        String(image).trim();
 
     if (!value) {
         return "";
@@ -522,7 +483,7 @@ async function getArticles() {
 
 
 // =========================================================
-// GET ONE ARTICLE
+// GET ARTICLE
 // =========================================================
 
 async function getArticle(articleId) {
@@ -541,7 +502,10 @@ async function getArticle(articleId) {
 // UPDATE ARTICLE
 // =========================================================
 
-async function updateArticle(articleId, articleData) {
+async function updateArticle(
+    articleId,
+    articleData
+) {
     const token = getToken();
 
     if (!token) {
@@ -645,7 +609,9 @@ async function saveArticle() {
             imageInput.files.length > 0
         ) {
             imageUrl =
-                await uploadImage(imageInput.files[0]);
+                await uploadImage(
+                    imageInput.files[0]
+                );
         }
 
         const articleData = {
@@ -656,32 +622,38 @@ async function saveArticle() {
             content
         };
 
-        // 백엔드 ArticleRequest는 image 사용
         if (imageUrl) {
-            articleData.image = imageUrl;
+            articleData.image =
+                imageUrl;
         }
 
         let result;
 
-        if (editingArticle && currentArticleId) {
-
-            result = await updateArticle(
-                currentArticleId,
-                articleData
-            );
+        if (
+            editingArticle &&
+            currentArticleId
+        ) {
+            result =
+                await updateArticle(
+                    currentArticleId,
+                    articleData
+                );
 
             alert("기사가 수정되었습니다.");
 
         } else {
-
-            result = await createArticle(
-                articleData
-            );
+            result =
+                await createArticle(
+                    articleData
+                );
 
             alert("기사가 저장되었습니다.");
         }
 
-        console.log("기사 저장 결과:", result);
+        console.log(
+            "기사 저장 결과:",
+            result
+        );
 
         editingArticle = null;
         currentArticleId = null;
@@ -701,7 +673,9 @@ async function saveArticle() {
 // CLEAR EDITOR
 // =========================================================
 
-function clearEditor(showPageAfter = true) {
+function clearEditor(
+    showPageAfter = true
+) {
     const title =
         document.getElementById("title");
 
@@ -720,14 +694,27 @@ function clearEditor(showPageAfter = true) {
     const content =
         document.getElementById("content");
 
-    if (title) title.value = "";
-    if (subtitle) subtitle.value = "";
-    if (author) author.value = "";
-    if (content) content.value = "";
+    if (title) {
+        title.value = "";
+    }
+
+    if (subtitle) {
+        subtitle.value = "";
+    }
+
+    if (author) {
+        author.value = "";
+    }
+
+    if (content) {
+        content.value = "";
+    }
 
     if (date) {
         const today =
-            new Date().toISOString().split("T")[0];
+            new Date()
+                .toISOString()
+                .split("T")[0];
 
         date.value = today;
     }
@@ -740,10 +727,13 @@ function clearEditor(showPageAfter = true) {
     currentArticleId = null;
 
     const editorTitle =
-        document.getElementById("editorTitle");
+        document.getElementById(
+            "editorTitle"
+        );
 
     if (editorTitle) {
-        editorTitle.textContent = "기사 작성";
+        editorTitle.textContent =
+            "기사 작성";
     }
 
     updatePreview();
@@ -760,7 +750,9 @@ function clearEditor(showPageAfter = true) {
 
 async function loadArticlesForPage() {
     const list =
-        document.getElementById("articleList");
+        document.getElementById(
+            "articleList"
+        );
 
     if (!list) {
         return;
@@ -770,19 +762,30 @@ async function loadArticlesForPage() {
         "<p>기사를 불러오는 중...</p>";
 
     try {
-        const data = await getArticles();
+        const data =
+            await getArticles();
 
         if (Array.isArray(data)) {
             allArticles = data;
-        } else if (Array.isArray(data?.articles)) {
-            allArticles = data.articles;
+
+        } else if (
+            Array.isArray(data?.articles)
+        ) {
+            allArticles =
+                data.articles;
+
         } else {
             allArticles = [];
         }
 
-        console.log("불러온 기사:", allArticles);
+        console.log(
+            "불러온 기사:",
+            allArticles
+        );
 
-        renderArticles(allArticles);
+        renderArticles(
+            allArticles
+        );
 
     } catch (error) {
         console.error(error);
@@ -799,23 +802,26 @@ async function loadArticlesForPage() {
 
 function renderArticles(articles) {
     const list =
-        document.getElementById("articleList");
+        document.getElementById(
+            "articleList"
+        );
 
     if (!list) {
         return;
     }
 
-    if (!articles || articles.length === 0) {
+    if (
+        !articles ||
+        articles.length === 0
+    ) {
         list.innerHTML =
             "<p>등록된 기사가 없습니다.</p>";
-
         return;
     }
 
     list.innerHTML = "";
 
     articles.forEach(article => {
-
         const articleId =
             article.id ??
             article.article_id;
@@ -823,19 +829,24 @@ function renderArticles(articles) {
         const card =
             document.createElement("div");
 
-        card.className = "article-card";
+        card.className =
+            "article-card";
 
         const title =
-            article.title || "제목 없음";
+            article.title ||
+            "제목 없음";
 
         const subtitle =
-            article.subtitle || "";
+            article.subtitle ||
+            "";
 
         const author =
-            article.author || "기자";
+            article.author ||
+            "기자";
 
         const date =
-            article.date || "";
+            article.date ||
+            "";
 
         const rawImage =
             article.image_url ||
@@ -882,15 +893,25 @@ function renderArticles(articles) {
 
             <small>
                 ${escapeHtml(author)}
-                ${date ? " · " + escapeHtml(date) : ""}
+                ${
+                    date
+                        ? " · " +
+                          escapeHtml(date)
+                        : ""
+                }
             </small>
         `;
 
         card.addEventListener(
             "click",
             () => {
-                if (articleId !== undefined) {
-                    viewArticle(articleId);
+                if (
+                    articleId !==
+                    undefined
+                ) {
+                    viewArticle(
+                        articleId
+                    );
                 }
             }
         );
@@ -906,48 +927,73 @@ function renderArticles(articles) {
 
 function searchArticles() {
     const searchInput =
-        document.getElementById("search");
+        document.getElementById(
+            "search"
+        );
 
     if (!searchInput) {
         return;
     }
 
     const keyword =
-        searchInput.value.trim().toLowerCase();
+        searchInput.value
+            .trim()
+            .toLowerCase();
 
     if (!keyword) {
-        renderArticles(allArticles);
+        renderArticles(
+            allArticles
+        );
         return;
     }
 
     const filtered =
-        allArticles.filter(article => {
+        allArticles.filter(
+            article => {
+                const title =
+                    String(
+                        article.title ||
+                        ""
+                    ).toLowerCase();
 
-            const title =
-                String(article.title || "")
-                    .toLowerCase();
+                const subtitle =
+                    String(
+                        article.subtitle ||
+                        ""
+                    ).toLowerCase();
 
-            const subtitle =
-                String(article.subtitle || "")
-                    .toLowerCase();
+                const content =
+                    String(
+                        article.content ||
+                        ""
+                    ).toLowerCase();
 
-            const content =
-                String(article.content || "")
-                    .toLowerCase();
+                const author =
+                    String(
+                        article.author ||
+                        ""
+                    ).toLowerCase();
 
-            const author =
-                String(article.author || "")
-                    .toLowerCase();
+                return (
+                    title.includes(
+                        keyword
+                    ) ||
+                    subtitle.includes(
+                        keyword
+                    ) ||
+                    content.includes(
+                        keyword
+                    ) ||
+                    author.includes(
+                        keyword
+                    )
+                );
+            }
+        );
 
-            return (
-                title.includes(keyword) ||
-                subtitle.includes(keyword) ||
-                content.includes(keyword) ||
-                author.includes(keyword)
-            );
-        });
-
-    renderArticles(filtered);
+    renderArticles(
+        filtered
+    );
 }
 
 
@@ -955,35 +1001,52 @@ function searchArticles() {
 // VIEW ARTICLE
 // =========================================================
 
-async function viewArticle(articleId) {
+async function viewArticle(
+    articleId
+) {
     try {
         const article =
-            await getArticle(articleId);
+            await getArticle(
+                articleId
+            );
 
         currentArticleId =
             article.id ??
             article.article_id ??
             articleId;
 
-        editingArticle = article;
+        editingArticle =
+            article;
 
         const title =
-            document.getElementById("viewTitle");
+            document.getElementById(
+                "viewTitle"
+            );
 
         const subtitle =
-            document.getElementById("viewSubtitle");
+            document.getElementById(
+                "viewSubtitle"
+            );
 
         const author =
-            document.getElementById("viewAuthor");
+            document.getElementById(
+                "viewAuthor"
+            );
 
         const date =
-            document.getElementById("viewDate");
+            document.getElementById(
+                "viewDate"
+            );
 
         const content =
-            document.getElementById("viewContent");
+            document.getElementById(
+                "viewContent"
+            );
 
         const image =
-            document.getElementById("viewImage");
+            document.getElementById(
+                "viewImage"
+            );
 
         if (title) {
             title.textContent =
@@ -1018,7 +1081,9 @@ async function viewArticle(articleId) {
             "";
 
         const imageUrl =
-            getImageUrl(rawImageUrl);
+            getImageUrl(
+                rawImageUrl
+            );
 
         console.log(
             "기사 보기 이미지:",
@@ -1027,15 +1092,24 @@ async function viewArticle(articleId) {
             imageUrl
         );
 
-        if (image && imageUrl) {
-            image.src = imageUrl;
-            image.hidden = false;
+        if (
+            image &&
+            imageUrl
+        ) {
+            image.src =
+                imageUrl;
+
+            image.hidden =
+                false;
+
         } else if (image) {
             image.src = "";
             image.hidden = true;
         }
 
-        showPage("viewPage");
+        showPage(
+            "viewPage"
+        );
 
     } catch (error) {
         console.error(error);
@@ -1045,7 +1119,7 @@ async function viewArticle(articleId) {
 
 
 // =========================================================
-// EDIT CURRENT ARTICLE
+// EDIT ARTICLE
 // =========================================================
 
 async function editCurrentArticle() {
@@ -1061,45 +1135,143 @@ async function editCurrentArticle() {
     }
 
     try {
+        // 현재 로그인한 사용자 확인
+        const currentUser =
+            await getCurrentUser();
+
+        if (!currentUser) {
+            alert("로그인이 필요합니다.");
+            showLogin();
+            return;
+        }
+
+        // 기사 정보 가져오기
         const article =
             editingArticle ||
-            await getArticle(currentArticleId);
+            await getArticle(
+                currentArticleId
+            );
 
-        editingArticle = article;
+        if (!article) {
+            alert("기사를 찾을 수 없습니다.");
+            return;
+        }
 
         const articleId =
             article.id ??
             article.article_id ??
             currentArticleId;
 
-        currentArticleId = articleId;
+        // 관리자 여부
+        const isAdmin =
+            Number(
+                currentUser.is_admin
+            ) === 1 ||
+            currentUser.is_admin === true;
 
-        document.getElementById("title").value =
-            article.title || "";
+        // 기사 작성자 여부
+        const isOwner =
+            Number(
+                article.owner_id
+            ) ===
+            Number(
+                currentUser.id
+            );
 
-        document.getElementById("subtitle").value =
-            article.subtitle || "";
+        // 일반 사용자가 남의 기사 수정 시도
+        if (
+            !isOwner &&
+            !isAdmin
+        ) {
+            alert(
+                "자신이 작성한 기사만 수정할 수 있습니다."
+            );
 
-        document.getElementById("author").value =
-            article.author || "";
+            // 편집 상태 초기화
+            editingArticle = null;
 
-        document.getElementById("date").value =
-            article.date || "";
+            return;
+        }
 
-        document.getElementById("content").value =
-            article.content || "";
+        // 권한 확인 완료
+        editingArticle =
+            article;
 
-        document.getElementById("image").value = "";
+        currentArticleId =
+            articleId;
+
+        const title =
+            document.getElementById(
+                "title"
+            );
+
+        const subtitle =
+            document.getElementById(
+                "subtitle"
+            );
+
+        const author =
+            document.getElementById(
+                "author"
+            );
+
+        const date =
+            document.getElementById(
+                "date"
+            );
+
+        const content =
+            document.getElementById(
+                "content"
+            );
+
+        const image =
+            document.getElementById(
+                "image"
+            );
+
+        if (title) {
+            title.value =
+                article.title || "";
+        }
+
+        if (subtitle) {
+            subtitle.value =
+                article.subtitle || "";
+        }
+
+        if (author) {
+            author.value =
+                article.author || "";
+        }
+
+        if (date) {
+            date.value =
+                article.date || "";
+        }
+
+        if (content) {
+            content.value =
+                article.content || "";
+        }
+
+        if (image) {
+            image.value = "";
+        }
 
         const editorTitle =
-            document.getElementById("editorTitle");
+            document.getElementById(
+                "editorTitle"
+            );
 
         if (editorTitle) {
             editorTitle.textContent =
                 "기사 편집";
         }
 
-        showPage("editorPage");
+        showPage(
+            "editorPage"
+        );
 
         updatePreview();
 
@@ -1116,38 +1288,59 @@ async function editCurrentArticle() {
 
 function updatePreview() {
     const title =
-        document.getElementById("title")?.value || "";
+        document.getElementById(
+            "title"
+        )?.value || "";
 
     const subtitle =
-        document.getElementById("subtitle")?.value || "";
+        document.getElementById(
+            "subtitle"
+        )?.value || "";
 
     const author =
-        document.getElementById("author")?.value || "";
+        document.getElementById(
+            "author"
+        )?.value || "";
 
     const date =
-        document.getElementById("date")?.value || "";
+        document.getElementById(
+            "date"
+        )?.value || "";
 
     const content =
-        document.getElementById("content")?.value || "";
+        document.getElementById(
+            "content"
+        )?.value || "";
 
     const previewTitle =
-        document.getElementById("previewTitle");
+        document.getElementById(
+            "previewTitle"
+        );
 
     const previewSubtitle =
-        document.getElementById("previewSubtitle");
+        document.getElementById(
+            "previewSubtitle"
+        );
 
     const previewAuthor =
-        document.getElementById("previewAuthor");
+        document.getElementById(
+            "previewAuthor"
+        );
 
     const previewDate =
-        document.getElementById("previewDate");
+        document.getElementById(
+            "previewDate"
+        );
 
     const previewContent =
-        document.getElementById("previewContent");
+        document.getElementById(
+            "previewContent"
+        );
 
     if (previewTitle) {
         previewTitle.textContent =
-            title || "기사 제목";
+            title ||
+            "기사 제목";
     }
 
     if (previewSubtitle) {
@@ -1182,10 +1375,14 @@ function updatePreview() {
 
 function updateImagePreview() {
     const input =
-        document.getElementById("image");
+        document.getElementById(
+            "image"
+        );
 
     const preview =
-        document.getElementById("previewImage");
+        document.getElementById(
+            "previewImage"
+        );
 
     if (!input || !preview) {
         return;
@@ -1201,165 +1398,263 @@ function updateImagePreview() {
     }
 
     const url =
-        URL.createObjectURL(file);
+        URL.createObjectURL(
+            file
+        );
 
-    preview.src = url;
-    preview.hidden = false;
+    preview.src =
+        url;
+
+    preview.hidden =
+        false;
 }
 
 
 // =========================================================
-// ADMIN API
+// ADMIN USERS
 // =========================================================
 
 async function getAdminUsers() {
-    const token = getToken();
+    const token =
+        getToken();
 
-    const response = await fetch(
-        `${API_URL}/admin/users`,
-        {
-            headers: {
-                "Authorization": `Bearer ${token}`
+    const response =
+        await fetch(
+            `${API_URL}/admin/users`,
+            {
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
             }
-        }
+        );
+
+    return await parseResponse(
+        response
     );
-
-    return await parseResponse(response);
-}
-
-
-async function makeAdmin(userId) {
-    const token = getToken();
-
-    const response = await fetch(
-        `${API_URL}/admin/make-admin/${userId}`,
-        {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
-        }
-    );
-
-    return await parseResponse(response);
-}
-
-
-async function removeAdmin(userId) {
-    const token = getToken();
-
-    const response = await fetch(
-        `${API_URL}/admin/remove-admin/${userId}`,
-        {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
-        }
-    );
-
-    return await parseResponse(response);
-}
-
-
-async function banUser(userId) {
-    const token = getToken();
-
-    const response = await fetch(
-        `${API_URL}/admin/ban/${userId}`,
-        {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
-        }
-    );
-
-    return await parseResponse(response);
-}
-
-
-async function unbanUser(userId) {
-    const token = getToken();
-
-    const response = await fetch(
-        `${API_URL}/admin/unban/${userId}`,
-        {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
-        }
-    );
-
-    return await parseResponse(response);
-}
-
-
-async function getAdminArticles() {
-    const token = getToken();
-
-    const response = await fetch(
-        `${API_URL}/admin/articles`,
-        {
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
-        }
-    );
-
-    return await parseResponse(response);
-}
-
-
-async function adminDeleteArticle(articleId) {
-    const token = getToken();
-
-    const response = await fetch(
-        `${API_URL}/admin/articles/${articleId}`,
-        {
-            method: "DELETE",
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
-        }
-    );
-
-    return await parseResponse(response);
 }
 
 
 // =========================================================
-// HTML ESCAPE
+// MAKE ADMIN
+// =========================================================
+
+async function makeAdmin(
+    userId
+) {
+    const token =
+        getToken();
+
+    const response =
+        await fetch(
+            `${API_URL}/admin/make-admin/${userId}`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// REMOVE ADMIN
+// =========================================================
+
+async function removeAdmin(
+    userId
+) {
+    const token =
+        getToken();
+
+    const response =
+        await fetch(
+            `${API_URL}/admin/remove-admin/${userId}`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// BAN USER
+// =========================================================
+
+async function banUser(
+    userId
+) {
+    const token =
+        getToken();
+
+    const response =
+        await fetch(
+            `${API_URL}/admin/ban/${userId}`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// UNBAN USER
+// =========================================================
+
+async function unbanUser(
+    userId
+) {
+    const token =
+        getToken();
+
+    const response =
+        await fetch(
+            `${API_URL}/admin/unban/${userId}`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// ADMIN ARTICLES
+// =========================================================
+
+async function getAdminArticles() {
+    const token =
+        getToken();
+
+    const response =
+        await fetch(
+            `${API_URL}/admin/articles`,
+            {
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// ADMIN DELETE ARTICLE
+// =========================================================
+
+async function adminDeleteArticle(
+    articleId
+) {
+    const token =
+        getToken();
+
+    const response =
+        await fetch(
+            `${API_URL}/admin/articles/${articleId}`,
+            {
+                method: "DELETE",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// ESCAPE HTML
 // =========================================================
 
 function escapeHtml(value) {
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    return String(
+        value ?? ""
+    )
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
 
-
-function escapeAttribute(value) {
-    return escapeHtml(value);
+function escapeAttribute(
+    value
+) {
+    return escapeHtml(
+        value
+    );
 }
 
 
 // =========================================================
-// DOM READY
+// DOM LOADED
 // =========================================================
 
 document.addEventListener(
     "DOMContentLoaded",
     async function () {
-
         const date =
-            document.getElementById("date");
+            document.getElementById(
+                "date"
+            );
 
-        if (date && !date.value) {
+        if (
+            date &&
+            !date.value
+        ) {
             date.value =
                 new Date()
                     .toISOString()
@@ -1374,26 +1669,31 @@ document.addEventListener(
             "content"
         ];
 
-        previewInputs.forEach(id => {
+        previewInputs.forEach(
+            id => {
+                const element =
+                    document.getElementById(
+                        id
+                    );
 
-            const element =
-                document.getElementById(id);
+                if (element) {
+                    element.addEventListener(
+                        "input",
+                        updatePreview
+                    );
 
-            if (element) {
-                element.addEventListener(
-                    "input",
-                    updatePreview
-                );
-
-                element.addEventListener(
-                    "change",
-                    updatePreview
-                );
+                    element.addEventListener(
+                        "change",
+                        updatePreview
+                    );
+                }
             }
-        });
+        );
 
         const imageInput =
-            document.getElementById("image");
+            document.getElementById(
+                "image"
+            );
 
         if (imageInput) {
             imageInput.addEventListener(
@@ -1410,47 +1710,98 @@ document.addEventListener(
 
 
 // =========================================================
-// INLINE HTML onclick 호환
+// WINDOW EXPORTS
 // =========================================================
 
-window.showLogin = showLogin;
-window.showEditor = showEditor;
-window.showArticles = showArticles;
+window.showLogin =
+    showLogin;
 
-window.login = login;
-window.registerUser = registerUser;
-window.logout = logout;
+window.showEditor =
+    showEditor;
 
-window.saveArticle = saveArticle;
-window.clearEditor = clearEditor;
+window.showArticles =
+    showArticles;
 
-window.searchArticles = searchArticles;
-window.editCurrentArticle = editCurrentArticle;
+window.login =
+    login;
 
-window.viewArticle = viewArticle;
+window.registerUser =
+    registerUser;
 
-window.updatePreview = updatePreview;
+window.logout =
+    logout;
 
-window.getToken = getToken;
-window.setToken = setToken;
-window.removeToken = removeToken;
+window.saveArticle =
+    saveArticle;
 
-window.getCurrentUser = getCurrentUser;
-window.checkLogin = checkLogin;
+window.clearEditor =
+    clearEditor;
 
-window.uploadImage = uploadImage;
-window.getImageUrl = getImageUrl;
+window.searchArticles =
+    searchArticles;
 
-window.createArticle = createArticle;
-window.getArticles = getArticles;
-window.getArticle = getArticle;
-window.updateArticle = updateArticle;
-window.deleteArticle = deleteArticle;
+window.editCurrentArticle =
+    editCurrentArticle;
 
-window.getAdminUsers = getAdminUsers;
-window.makeAdmin = makeAdmin;
-window.removeAdmin = removeAdmin;
-window.banUser = banUser;
-window.unbanUser = unbanUser;
-window.getAdminArticles = getAdminArticles;
-window.adminDeleteArticle = adminDeleteArticle;
+window.viewArticle =
+    viewArticle;
+
+window.updatePreview =
+    updatePreview;
+
+window.getToken =
+    getToken;
+
+window.setToken =
+    setToken;
+
+window.removeToken =
+    removeToken;
+
+window.getCurrentUser =
+    getCurrentUser;
+
+window.checkLogin =
+    checkLogin;
+
+window.uploadImage =
+    uploadImage;
+
+window.getImageUrl =
+    getImageUrl;
+
+window.createArticle =
+    createArticle;
+
+window.getArticles =
+    getArticles;
+
+window.getArticle =
+    getArticle;
+
+window.updateArticle =
+    updateArticle;
+
+window.deleteArticle =
+    deleteArticle;
+
+window.getAdminUsers =
+    getAdminUsers;
+
+window.makeAdmin =
+    makeAdmin;
+
+window.removeAdmin =
+    removeAdmin;
+
+window.banUser =
+    banUser;
+
+window.unbanUser =
+    unbanUser;
+
+window.getAdminArticles =
+    getAdminArticles;
+
+window.adminDeleteArticle =
+    adminDeleteArticle;
