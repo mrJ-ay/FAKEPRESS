@@ -5,24 +5,47 @@ let allArticles = [];
 let currentArticleId = null;
 let editingArticle = null;
 
+
+// =========================================================
+// TOKEN
+// =========================================================
+
 function getToken() {
     return localStorage.getItem(TOKEN_KEY);
 }
 
+
 function setToken(token) {
-    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(
+        TOKEN_KEY,
+        token
+    );
 }
+
 
 function removeToken() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem("fakepress_current_user");
+    localStorage.removeItem(
+        TOKEN_KEY
+    );
+
+    localStorage.removeItem(
+        "fakepress_current_user"
+    );
 }
 
-async function parseResponse(response) {
+
+// =========================================================
+// RESPONSE
+// =========================================================
+
+async function parseResponse(
+    response
+) {
     let data = null;
 
     try {
         data = await response.json();
+
     } catch {
         data = null;
     }
@@ -33,11 +56,18 @@ async function parseResponse(response) {
             data?.message ||
             "서버 요청에 실패했습니다.";
 
-        throw new Error(message);
+        throw new Error(
+            message
+        );
     }
 
     return data;
 }
+
+
+// =========================================================
+// PAGE
+// =========================================================
 
 function showPage(pageId) {
     const pages = [
@@ -47,46 +77,73 @@ function showPage(pageId) {
         "viewPage"
     ];
 
-    pages.forEach(id => {
-        const page = document.getElementById(id);
+    pages.forEach(
+        id => {
+            const page =
+                document.getElementById(
+                    id
+                );
 
-        if (page) {
-            page.hidden = id !== pageId;
+            if (page) {
+                page.hidden =
+                    id !== pageId;
+            }
         }
-    });
+    );
 }
+
 
 function showLogin() {
-    showPage("loginPage");
+    showPage(
+        "loginPage"
+    );
 }
+
 
 function showEditor() {
     if (!getToken()) {
-        alert("로그인이 필요합니다.");
+        alert(
+            "로그인이 필요합니다."
+        );
+
         showLogin();
+
         return;
     }
 
-    showPage("editorPage");
+    showPage(
+        "editorPage"
+    );
 
     const editorTitle =
-        document.getElementById("editorTitle");
+        document.getElementById(
+            "editorTitle"
+        );
 
     if (editingArticle) {
+
         if (editorTitle) {
-            editorTitle.textContent = "기사 편집";
+            editorTitle.textContent =
+                "기사 편집";
         }
+
     } else {
+
         if (editorTitle) {
-            editorTitle.textContent = "기사 작성";
+            editorTitle.textContent =
+                "기사 작성";
         }
     }
 
     updatePreview();
 }
 
+
 async function showArticles() {
-    showPage("articlesPage");
+    showPage(
+        "articlesPage"
+    );
+
     await loadArticlesForPage();
 }
 
@@ -97,37 +154,50 @@ async function showArticles() {
 
 async function registerUser() {
     const nickname =
-        document.getElementById("loginNickname").value.trim();
+        document.getElementById(
+            "loginNickname"
+        ).value.trim();
 
     const password =
-        document.getElementById("loginPassword").value;
+        document.getElementById(
+            "loginPassword"
+        ).value;
 
     if (!nickname || !password) {
-        alert("닉네임과 비밀번호를 입력하세요.");
+        alert(
+            "닉네임과 비밀번호를 입력하세요."
+        );
+
         return;
     }
 
     try {
-        const response = await fetch(
-            `${API_URL}/auth/register`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    nickname,
-                    password
-                })
-            }
-        );
+        const response =
+            await fetch(
+                `${API_URL}/auth/register`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify({
+                        nickname,
+                        password
+                    })
+                }
+            );
 
-        const data = await parseResponse(response);
+        const data =
+            await parseResponse(
+                response
+            );
 
         alert(
             data?.message ||
             "회원가입이 완료되었습니다."
         );
+
     } catch (error) {
         console.error(error);
         alert(error.message);
@@ -141,32 +211,44 @@ async function registerUser() {
 
 async function login() {
     const nickname =
-        document.getElementById("loginNickname").value.trim();
+        document.getElementById(
+            "loginNickname"
+        ).value.trim();
 
     const password =
-        document.getElementById("loginPassword").value;
+        document.getElementById(
+            "loginPassword"
+        ).value;
 
     if (!nickname || !password) {
-        alert("닉네임과 비밀번호를 입력하세요.");
+        alert(
+            "닉네임과 비밀번호를 입력하세요."
+        );
+
         return;
     }
 
     try {
-        const response = await fetch(
-            `${API_URL}/auth/login`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    nickname,
-                    password
-                })
-            }
-        );
+        const response =
+            await fetch(
+                `${API_URL}/auth/login`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+                    body: JSON.stringify({
+                        nickname,
+                        password
+                    })
+                }
+            );
 
-        const data = await parseResponse(response);
+        const data =
+            await parseResponse(
+                response
+            );
 
         const token =
             data?.access_token ||
@@ -180,7 +262,9 @@ async function login() {
 
         setToken(token);
 
-        alert("로그인되었습니다.");
+        alert(
+            "로그인되었습니다."
+        );
 
         await checkLogin();
 
@@ -204,13 +288,19 @@ function logout() {
     editingArticle = null;
 
     const userInfo =
-        document.getElementById("userInfo");
+        document.getElementById(
+            "userInfo"
+        );
 
     const loginButton =
-        document.getElementById("loginButton");
+        document.getElementById(
+            "loginButton"
+        );
 
     const adminButton =
-        document.getElementById("adminButton");
+        document.getElementById(
+            "adminButton"
+        );
 
     if (userInfo) {
         userInfo.hidden = true;
@@ -221,10 +311,13 @@ function logout() {
     }
 
     if (adminButton) {
-        adminButton.style.display = "none";
+        adminButton.style.display =
+            "none";
     }
 
-    alert("로그아웃되었습니다.");
+    alert(
+        "로그아웃되었습니다."
+    );
 
     showLogin();
 }
@@ -235,28 +328,34 @@ function logout() {
 // =========================================================
 
 async function getCurrentUser() {
-    const token = getToken();
+    const token =
+        getToken();
 
     if (!token) {
         return null;
     }
 
-    const response = await fetch(
-        `${API_URL}/auth/me`,
-        {
-            method: "GET",
-            headers: {
-                "Authorization": `Bearer ${token}`
+    const response =
+        await fetch(
+            `${API_URL}/auth/me`,
+            {
+                method: "GET",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
             }
-        }
-    );
+        );
 
     if (response.status === 401) {
         removeToken();
+
         return null;
     }
 
-    return await parseResponse(response);
+    return await parseResponse(
+        response
+    );
 }
 
 
@@ -266,28 +365,40 @@ async function getCurrentUser() {
 
 async function checkLogin() {
     const loginButton =
-        document.getElementById("loginButton");
+        document.getElementById(
+            "loginButton"
+        );
 
     const userInfo =
-        document.getElementById("userInfo");
+        document.getElementById(
+            "userInfo"
+        );
 
     const loggedInUser =
-        document.getElementById("loggedInUser");
+        document.getElementById(
+            "loggedInUser"
+        );
 
     const adminButton =
-        document.getElementById("adminButton");
+        document.getElementById(
+            "adminButton"
+        );
 
     if (!getToken()) {
+
         if (loginButton) {
-            loginButton.style.display = "";
+            loginButton.style.display =
+                "";
         }
 
         if (userInfo) {
-            userInfo.hidden = true;
+            userInfo.hidden =
+                true;
         }
 
         if (adminButton) {
-            adminButton.style.display = "none";
+            adminButton.style.display =
+                "none";
         }
 
         return null;
@@ -298,16 +409,20 @@ async function checkLogin() {
             await getCurrentUser();
 
         if (!user) {
+
             if (loginButton) {
-                loginButton.style.display = "";
+                loginButton.style.display =
+                    "";
             }
 
             if (userInfo) {
-                userInfo.hidden = true;
+                userInfo.hidden =
+                    true;
             }
 
             if (adminButton) {
-                adminButton.style.display = "none";
+                adminButton.style.display =
+                    "none";
             }
 
             return null;
@@ -319,25 +434,35 @@ async function checkLogin() {
         );
 
         if (loginButton) {
-            loginButton.style.display = "none";
+            loginButton.style.display =
+                "none";
         }
 
         if (userInfo) {
-            userInfo.hidden = false;
+            userInfo.hidden =
+                false;
         }
 
         if (loggedInUser) {
             loggedInUser.textContent =
-                `${user.nickname || user.username || "사용자"}님`;
+                `${
+                    user.nickname ||
+                    user.username ||
+                    "사용자"
+                }님`;
         }
 
         if (adminButton) {
             const isAdmin =
-                Number(user.is_admin) === 1 ||
+                Number(
+                    user.is_admin
+                ) === 1 ||
                 user.is_admin === true;
 
             adminButton.style.display =
-                isAdmin ? "" : "none";
+                isAdmin
+                    ? ""
+                    : "none";
         }
 
         return user;
@@ -348,15 +473,18 @@ async function checkLogin() {
         removeToken();
 
         if (loginButton) {
-            loginButton.style.display = "";
+            loginButton.style.display =
+                "";
         }
 
         if (userInfo) {
-            userInfo.hidden = true;
+            userInfo.hidden =
+                true;
         }
 
         if (adminButton) {
-            adminButton.style.display = "none";
+            adminButton.style.display =
+                "none";
         }
 
         return null;
@@ -373,29 +501,40 @@ async function uploadImage(file) {
         return null;
     }
 
-    const token = getToken();
+    const token =
+        getToken();
 
     if (!token) {
-        throw new Error("로그인이 필요합니다.");
+        throw new Error(
+            "로그인이 필요합니다."
+        );
     }
 
-    const formData = new FormData();
+    const formData =
+        new FormData();
 
-    formData.append("file", file);
-
-    const response = await fetch(
-        `${API_URL}/upload-image`,
-        {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`
-            },
-            body: formData
-        }
+    formData.append(
+        "file",
+        file
     );
 
+    const response =
+        await fetch(
+            `${API_URL}/upload-image`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                },
+                body: formData
+            }
+        );
+
     const data =
-        await parseResponse(response);
+        await parseResponse(
+            response
+        );
 
     return (
         data?.url ||
@@ -424,18 +563,28 @@ function getImageUrl(image) {
     }
 
     if (
-        value.startsWith("http://") ||
-        value.startsWith("https://") ||
-        value.startsWith("data:")
+        value.startsWith(
+            "http://"
+        ) ||
+        value.startsWith(
+            "https://"
+        ) ||
+        value.startsWith(
+            "data:"
+        )
     ) {
         return value;
     }
 
     if (value.startsWith("/")) {
-        return `${API_URL}${value}`;
+        return (
+            `${API_URL}${value}`
+        );
     }
 
-    return `${API_URL}/${value}`;
+    return (
+        `${API_URL}/${value}`
+    );
 }
 
 
@@ -443,26 +592,38 @@ function getImageUrl(image) {
 // CREATE ARTICLE
 // =========================================================
 
-async function createArticle(articleData) {
-    const token = getToken();
+async function createArticle(
+    articleData
+) {
+    const token =
+        getToken();
 
     if (!token) {
-        throw new Error("로그인이 필요합니다.");
+        throw new Error(
+            "로그인이 필요합니다."
+        );
     }
 
-    const response = await fetch(
-        `${API_URL}/articles`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify(articleData)
-        }
-    );
+    const response =
+        await fetch(
+            `${API_URL}/articles`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Authorization":
+                        `Bearer ${token}`
+                },
+                body: JSON.stringify(
+                    articleData
+                )
+            }
+        );
 
-    return await parseResponse(response);
+    return await parseResponse(
+        response
+    );
 }
 
 
@@ -471,14 +632,17 @@ async function createArticle(articleData) {
 // =========================================================
 
 async function getArticles() {
-    const response = await fetch(
-        `${API_URL}/articles`,
-        {
-            method: "GET"
-        }
-    );
+    const response =
+        await fetch(
+            `${API_URL}/articles`,
+            {
+                method: "GET"
+            }
+        );
 
-    return await parseResponse(response);
+    return await parseResponse(
+        response
+    );
 }
 
 
@@ -486,15 +650,20 @@ async function getArticles() {
 // GET ARTICLE
 // =========================================================
 
-async function getArticle(articleId) {
-    const response = await fetch(
-        `${API_URL}/articles/${articleId}`,
-        {
-            method: "GET"
-        }
-    );
+async function getArticle(
+    articleId
+) {
+    const response =
+        await fetch(
+            `${API_URL}/articles/${articleId}`,
+            {
+                method: "GET"
+            }
+        );
 
-    return await parseResponse(response);
+    return await parseResponse(
+        response
+    );
 }
 
 
@@ -506,25 +675,35 @@ async function updateArticle(
     articleId,
     articleData
 ) {
-    const token = getToken();
+    const token =
+        getToken();
 
     if (!token) {
-        throw new Error("로그인이 필요합니다.");
+        throw new Error(
+            "로그인이 필요합니다."
+        );
     }
 
-    const response = await fetch(
-        `${API_URL}/articles/${articleId}`,
-        {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify(articleData)
-        }
-    );
+    const response =
+        await fetch(
+            `${API_URL}/articles/${articleId}`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Authorization":
+                        `Bearer ${token}`
+                },
+                body: JSON.stringify(
+                    articleData
+                )
+            }
+        );
 
-    return await parseResponse(response);
+    return await parseResponse(
+        response
+    );
 }
 
 
@@ -532,24 +711,33 @@ async function updateArticle(
 // DELETE ARTICLE
 // =========================================================
 
-async function deleteArticle(articleId) {
-    const token = getToken();
+async function deleteArticle(
+    articleId
+) {
+    const token =
+        getToken();
 
     if (!token) {
-        throw new Error("로그인이 필요합니다.");
+        throw new Error(
+            "로그인이 필요합니다."
+        );
     }
 
-    const response = await fetch(
-        `${API_URL}/articles/${articleId}`,
-        {
-            method: "DELETE",
-            headers: {
-                "Authorization": `Bearer ${token}`
+    const response =
+        await fetch(
+            `${API_URL}/articles/${articleId}`,
+            {
+                method: "DELETE",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
             }
-        }
-    );
+        );
 
-    return await parseResponse(response);
+    return await parseResponse(
+        response
+    );
 }
 
 
@@ -559,41 +747,66 @@ async function deleteArticle(articleId) {
 
 async function saveArticle() {
     if (!getToken()) {
-        alert("로그인이 필요합니다.");
+        alert(
+            "로그인이 필요합니다."
+        );
+
         showLogin();
+
         return;
     }
 
     const title =
-        document.getElementById("title").value.trim();
+        document.getElementById(
+            "title"
+        ).value.trim();
 
     const subtitle =
-        document.getElementById("subtitle").value.trim();
+        document.getElementById(
+            "subtitle"
+        ).value.trim();
 
     const author =
-        document.getElementById("author").value.trim();
+        document.getElementById(
+            "author"
+        ).value.trim();
 
     const date =
-        document.getElementById("date").value;
+        document.getElementById(
+            "date"
+        ).value;
 
     const content =
-        document.getElementById("content").value.trim();
+        document.getElementById(
+            "content"
+        ).value.trim();
 
     const imageInput =
-        document.getElementById("image");
+        document.getElementById(
+            "image"
+        );
 
     if (!title) {
-        alert("기사 제목을 입력하세요.");
+        alert(
+            "기사 제목을 입력하세요."
+        );
+
         return;
     }
 
     if (!author) {
-        alert("기자명을 입력하세요.");
+        alert(
+            "기자명을 입력하세요."
+        );
+
         return;
     }
 
     if (!content) {
-        alert("기사 본문을 입력하세요.");
+        alert(
+            "기사 본문을 입력하세요."
+        );
+
         return;
     }
 
@@ -639,7 +852,9 @@ async function saveArticle() {
                     articleData
                 );
 
-            alert("기사가 수정되었습니다.");
+            alert(
+                "기사가 수정되었습니다."
+            );
 
         } else {
             result =
@@ -647,7 +862,9 @@ async function saveArticle() {
                     articleData
                 );
 
-            alert("기사가 저장되었습니다.");
+            alert(
+                "기사가 저장되었습니다."
+            );
         }
 
         console.log(
@@ -664,7 +881,10 @@ async function saveArticle() {
 
     } catch (error) {
         console.error(error);
-        alert(error.message);
+
+        alert(
+            error.message
+        );
     }
 }
 
@@ -677,22 +897,34 @@ function clearEditor(
     showPageAfter = true
 ) {
     const title =
-        document.getElementById("title");
+        document.getElementById(
+            "title"
+        );
 
     const subtitle =
-        document.getElementById("subtitle");
+        document.getElementById(
+            "subtitle"
+        );
 
     const author =
-        document.getElementById("author");
+        document.getElementById(
+            "author"
+        );
 
     const date =
-        document.getElementById("date");
+        document.getElementById(
+            "date"
+        );
 
     const image =
-        document.getElementById("image");
+        document.getElementById(
+            "image"
+        );
 
     const content =
-        document.getElementById("content");
+        document.getElementById(
+            "content"
+        );
 
     if (title) {
         title.value = "";
@@ -711,12 +943,10 @@ function clearEditor(
     }
 
     if (date) {
-        const today =
+        date.value =
             new Date()
                 .toISOString()
                 .split("T")[0];
-
-        date.value = today;
     }
 
     if (image) {
@@ -769,7 +999,9 @@ async function loadArticlesForPage() {
             allArticles = data;
 
         } else if (
-            Array.isArray(data?.articles)
+            Array.isArray(
+                data?.articles
+            )
         ) {
             allArticles =
                 data.articles;
@@ -800,7 +1032,9 @@ async function loadArticlesForPage() {
 // RENDER ARTICLES
 // =========================================================
 
-function renderArticles(articles) {
+function renderArticles(
+    articles
+) {
     const list =
         document.getElementById(
             "articleList"
@@ -816,108 +1050,110 @@ function renderArticles(articles) {
     ) {
         list.innerHTML =
             "<p>등록된 기사가 없습니다.</p>";
+
         return;
     }
 
     list.innerHTML = "";
 
-    articles.forEach(article => {
-        const articleId =
-            article.id ??
-            article.article_id;
+    articles.forEach(
+        article => {
+            const articleId =
+                article.id ??
+                article.article_id;
 
-        const card =
-            document.createElement("div");
+            const card =
+                document.createElement(
+                    "div"
+                );
 
-        card.className =
-            "article-card";
+            card.className =
+                "article-card";
 
-        const title =
-            article.title ||
-            "제목 없음";
+            const title =
+                article.title ||
+                "제목 없음";
 
-        const subtitle =
-            article.subtitle ||
-            "";
+            const subtitle =
+                article.subtitle ||
+                "";
 
-        const author =
-            article.author ||
-            "기자";
+            const author =
+                article.author ||
+                "기자";
 
-        const date =
-            article.date ||
-            "";
+            const date =
+                article.date ||
+                "";
 
-        const rawImage =
-            article.image_url ||
-            article.image ||
-            "";
+            const rawImage =
+                article.image_url ||
+                article.image ||
+                "";
 
-        const image =
-            getImageUrl(rawImage);
+            const image =
+                getImageUrl(
+                    rawImage
+                );
 
-        console.log(
-            "기사 이미지:",
-            rawImage,
-            "→",
-            image
-        );
-
-        card.innerHTML = `
-            ${
-                image
-                    ? `
-                        <img
-                            src="${escapeAttribute(image)}"
-                            class="news-image"
-                            alt=""
-                            loading="lazy"
-                        >
-                      `
-                    : ""
-            }
-
-            <h3>
-                ${escapeHtml(title)}
-            </h3>
-
-            ${
-                subtitle
-                    ? `
-                        <p>
-                            ${escapeHtml(subtitle)}
-                        </p>
-                      `
-                    : ""
-            }
-
-            <small>
-                ${escapeHtml(author)}
+            card.innerHTML = `
                 ${
-                    date
-                        ? " · " +
-                          escapeHtml(date)
+                    image
+                        ? `
+                            <img
+                                src="${escapeAttribute(image)}"
+                                class="news-image"
+                                alt=""
+                                loading="lazy"
+                            >
+                          `
                         : ""
                 }
-            </small>
-        `;
 
-        card.addEventListener(
-            "click",
-            () => {
-                if (
-                    articleId !==
-                    undefined
-                ) {
-                    viewArticle(
-                        articleId
-                    );
+                <h3>
+                    ${escapeHtml(title)}
+                </h3>
+
+                ${
+                    subtitle
+                        ? `
+                            <p>
+                                ${escapeHtml(subtitle)}
+                            </p>
+                          `
+                        : ""
                 }
-            }
-        );
 
-        list.appendChild(card);
-    });
+                <small>
+                    ${escapeHtml(author)}
+                    ${
+                        date
+                            ? " · " +
+                              escapeHtml(date)
+                            : ""
+                    }
+                </small>
+            `;
+
+            card.addEventListener(
+                "click",
+                () => {
+                    if (
+                        articleId !==
+                        undefined
+                    ) {
+                        viewArticle(
+                            articleId
+                        );
+                    }
+                }
+            );
+
+            list.appendChild(
+                card
+            );
+        }
+    );
 }
 
 
@@ -944,6 +1180,7 @@ function searchArticles() {
         renderArticles(
             allArticles
         );
+
         return;
     }
 
@@ -1111,9 +1348,17 @@ async function viewArticle(
             "viewPage"
         );
 
+        // 댓글 불러오기
+        await loadComments(
+            currentArticleId
+        );
+
     } catch (error) {
         console.error(error);
-        alert(error.message);
+
+        alert(
+            error.message
+        );
     }
 }
 
@@ -1124,28 +1369,37 @@ async function viewArticle(
 
 async function editCurrentArticle() {
     if (!currentArticleId) {
-        alert("편집할 기사가 없습니다.");
+        alert(
+            "편집할 기사가 없습니다."
+        );
+
         return;
     }
 
     if (!getToken()) {
-        alert("로그인이 필요합니다.");
+        alert(
+            "로그인이 필요합니다."
+        );
+
         showLogin();
+
         return;
     }
 
     try {
-        // 현재 로그인한 사용자 확인
         const currentUser =
             await getCurrentUser();
 
         if (!currentUser) {
-            alert("로그인이 필요합니다.");
+            alert(
+                "로그인이 필요합니다."
+            );
+
             showLogin();
+
             return;
         }
 
-        // 기사 정보 가져오기
         const article =
             editingArticle ||
             await getArticle(
@@ -1153,7 +1407,10 @@ async function editCurrentArticle() {
             );
 
         if (!article) {
-            alert("기사를 찾을 수 없습니다.");
+            alert(
+                "기사를 찾을 수 없습니다."
+            );
+
             return;
         }
 
@@ -1162,14 +1419,12 @@ async function editCurrentArticle() {
             article.article_id ??
             currentArticleId;
 
-        // 관리자 여부
         const isAdmin =
             Number(
                 currentUser.is_admin
             ) === 1 ||
             currentUser.is_admin === true;
 
-        // 기사 작성자 여부
         const isOwner =
             Number(
                 article.owner_id
@@ -1178,7 +1433,6 @@ async function editCurrentArticle() {
                 currentUser.id
             );
 
-        // 일반 사용자가 남의 기사 수정 시도
         if (
             !isOwner &&
             !isAdmin
@@ -1187,13 +1441,11 @@ async function editCurrentArticle() {
                 "자신이 작성한 기사만 수정할 수 있습니다."
             );
 
-            // 편집 상태 초기화
             editingArticle = null;
 
             return;
         }
 
-        // 권한 확인 완료
         editingArticle =
             article;
 
@@ -1277,7 +1529,10 @@ async function editCurrentArticle() {
 
     } catch (error) {
         console.error(error);
-        alert(error.message);
+
+        alert(
+            error.message
+        );
     }
 }
 
@@ -1394,6 +1649,7 @@ function updateImagePreview() {
     if (!file) {
         preview.src = "";
         preview.hidden = true;
+
         return;
     }
 
@@ -1407,6 +1663,443 @@ function updateImagePreview() {
 
     preview.hidden =
         false;
+}
+
+
+// =========================================================
+// COMMENTS
+// =========================================================
+
+async function getComments(
+    articleId
+) {
+    const response =
+        await fetch(
+            `${API_URL}/articles/${articleId}/comments`,
+            {
+                method: "GET"
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// CREATE COMMENT
+// =========================================================
+
+async function createComment(
+    articleId,
+    content
+) {
+    const token =
+        getToken();
+
+    if (!token) {
+        throw new Error(
+            "댓글을 작성하려면 로그인해야 합니다."
+        );
+    }
+
+    const response =
+        await fetch(
+            `${API_URL}/articles/${articleId}/comments`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                    "Authorization":
+                        `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    content
+                })
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// DELETE COMMENT
+// =========================================================
+
+async function deleteComment(
+    commentId
+) {
+    const token =
+        getToken();
+
+    if (!token) {
+        throw new Error(
+            "로그인이 필요합니다."
+        );
+    }
+
+    const response =
+        await fetch(
+            `${API_URL}/comments/${commentId}`,
+            {
+                method: "DELETE",
+                headers: {
+                    "Authorization":
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return await parseResponse(
+        response
+    );
+}
+
+
+// =========================================================
+// LOAD COMMENTS
+// =========================================================
+
+async function loadComments(
+    articleId
+) {
+    const viewPage =
+        document.getElementById(
+            "viewPage"
+        );
+
+    if (!viewPage) {
+        return;
+    }
+
+    let container =
+        document.getElementById(
+            "commentsSection"
+        );
+
+    if (!container) {
+        container =
+            document.createElement(
+                "div"
+            );
+
+        container.id =
+            "commentsSection";
+
+        viewPage.appendChild(
+            container
+        );
+    }
+
+    container.innerHTML =
+        "<p>댓글을 불러오는 중...</p>";
+
+    try {
+        const comments =
+            await getComments(
+                articleId
+            );
+
+        await renderComments(
+            comments || []
+        );
+
+    } catch (error) {
+        console.error(error);
+
+        container.innerHTML = `
+            <h3>댓글</h3>
+            <p>
+                댓글을 불러오지 못했습니다.
+            </p>
+        `;
+    }
+}
+
+
+// =========================================================
+// RENDER COMMENTS
+// =========================================================
+
+async function renderComments(
+    comments
+) {
+    const container =
+        document.getElementById(
+            "commentsSection"
+        );
+
+    if (!container) {
+        return;
+    }
+
+    const currentUser =
+        await getCurrentUser();
+
+    const currentUserId =
+        currentUser
+            ? Number(
+                currentUser.id
+            )
+            : null;
+
+    const isAdmin =
+        currentUser &&
+        (
+            Number(
+                currentUser.is_admin
+            ) === 1 ||
+            currentUser.is_admin === true
+        );
+
+    let html = `
+        <div class="comments-box">
+
+            <h3>
+                댓글
+                <span>
+                    ${comments.length}
+                </span>
+            </h3>
+    `;
+
+    if (getToken()) {
+
+        html += `
+            <div class="comment-form">
+
+                <textarea
+                    id="commentInput"
+                    maxlength="1000"
+                    placeholder="댓글을 입력하세요."
+                ></textarea>
+
+                <button
+                    type="button"
+                    onclick="submitComment()"
+                >
+                    댓글 작성
+                </button>
+
+            </div>
+        `;
+
+    } else {
+
+        html += `
+            <p>
+                댓글을 작성하려면 로그인하세요.
+            </p>
+        `;
+    }
+
+    html += `
+        <div
+            id="commentList"
+            class="comment-list"
+        >
+    `;
+
+    if (
+        !comments ||
+        comments.length === 0
+    ) {
+
+        html += `
+            <p>
+                아직 댓글이 없습니다.
+            </p>
+        `;
+
+    } else {
+
+        comments.forEach(
+            comment => {
+                const ownerId =
+                    Number(
+                        comment.owner_id
+                    );
+
+                const canDelete =
+                    currentUser &&
+                    (
+                        ownerId ===
+                        currentUserId ||
+                        isAdmin
+                    );
+
+                const createdAt =
+                    comment.created_at
+                        ? new Date(
+                            comment.created_at
+                        ).toLocaleString(
+                            "ko-KR"
+                        )
+                        : "";
+
+                html += `
+                    <div
+                        class="comment"
+                        data-comment-id="${comment.id}"
+                    >
+
+                        <div
+                            class="comment-header"
+                        >
+
+                            <strong>
+                                ${escapeHtml(
+                                    comment.nickname ||
+                                    "사용자"
+                                )}
+                            </strong>
+
+                            <small>
+                                ${escapeHtml(
+                                    createdAt
+                                )}
+                            </small>
+
+                        </div>
+
+                        <div
+                            class="comment-content"
+                        >
+                            ${escapeHtml(
+                                comment.content
+                            )}
+                        </div>
+
+                        ${
+                            canDelete
+                                ? `
+                                    <button
+                                        type="button"
+                                        onclick="handleDeleteComment(${comment.id})"
+                                    >
+                                        삭제
+                                    </button>
+                                  `
+                                : ""
+                        }
+
+                    </div>
+                `;
+            }
+        );
+    }
+
+    html += `
+        </div>
+        </div>
+    `;
+
+    container.innerHTML =
+        html;
+}
+
+
+// =========================================================
+// SUBMIT COMMENT
+// =========================================================
+
+async function submitComment() {
+    if (!getToken()) {
+        alert(
+            "댓글을 작성하려면 로그인해야 합니다."
+        );
+
+        showLogin();
+
+        return;
+    }
+
+    if (!currentArticleId) {
+        alert(
+            "기사를 찾을 수 없습니다."
+        );
+
+        return;
+    }
+
+    const input =
+        document.getElementById(
+            "commentInput"
+        );
+
+    if (!input) {
+        return;
+    }
+
+    const content =
+        input.value.trim();
+
+    if (!content) {
+        alert(
+            "댓글 내용을 입력하세요."
+        );
+
+        return;
+    }
+
+    try {
+        await createComment(
+            currentArticleId,
+            content
+        );
+
+        input.value = "";
+
+        await loadComments(
+            currentArticleId
+        );
+
+    } catch (error) {
+        console.error(error);
+
+        alert(
+            error.message
+        );
+    }
+}
+
+
+// =========================================================
+// DELETE COMMENT
+// =========================================================
+
+async function handleDeleteComment(
+    commentId
+) {
+    if (
+        !confirm(
+            "이 댓글을 삭제하시겠습니까?"
+        )
+    ) {
+        return;
+    }
+
+    try {
+        await deleteComment(
+            commentId
+        );
+
+        await loadComments(
+            currentArticleId
+        );
+
+    } catch (error) {
+        console.error(error);
+
+        alert(
+            error.message
+        );
+    }
 }
 
 
@@ -1630,6 +2323,7 @@ function escapeHtml(value) {
         );
 }
 
+
 function escapeAttribute(
     value
 ) {
@@ -1646,6 +2340,7 @@ function escapeAttribute(
 document.addEventListener(
     "DOMContentLoaded",
     async function () {
+
         const date =
             document.getElementById(
                 "date"
@@ -1671,12 +2366,14 @@ document.addEventListener(
 
         previewInputs.forEach(
             id => {
+
                 const element =
                     document.getElementById(
                         id
                     );
 
                 if (element) {
+
                     element.addEventListener(
                         "input",
                         updatePreview
@@ -1696,6 +2393,7 @@ document.addEventListener(
             );
 
         if (imageInput) {
+
             imageInput.addEventListener(
                 "change",
                 updateImagePreview
@@ -1784,6 +2482,27 @@ window.updateArticle =
 
 window.deleteArticle =
     deleteArticle;
+
+window.getComments =
+    getComments;
+
+window.createComment =
+    createComment;
+
+window.deleteComment =
+    deleteComment;
+
+window.loadComments =
+    loadComments;
+
+window.renderComments =
+    renderComments;
+
+window.submitComment =
+    submitComment;
+
+window.handleDeleteComment =
+    handleDeleteComment;
 
 window.getAdminUsers =
     getAdminUsers;

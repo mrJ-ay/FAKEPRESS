@@ -13,34 +13,19 @@ from fastapi import (
 )
 
 from fastapi.middleware.cors import CORSMiddleware
-
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
 from pydantic import BaseModel
-
 from sqlalchemy.orm import Session
-
 from jose import jwt
-
 from pwdlib import PasswordHash
-
 from supabase import create_client
 
 from database import SessionLocal, engine
+from models import Base, User, Article, Comment
 
-from models import Base, User, Article
-
-
-# =========================================================
-# DATABASE
-# =========================================================
 
 Base.metadata.create_all(bind=engine)
 
-
-# =========================================================
-# APP
-# =========================================================
 
 app = FastAPI(
     title="FAKEPRESS API",
@@ -48,10 +33,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-
-# =========================================================
-# CORS
-# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,7 +44,7 @@ app.add_middleware(
 
 
 # =========================================================
-# ENV
+# CONFIG
 # =========================================================
 
 SECRET_KEY = os.getenv(
@@ -76,6 +57,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 
+# =========================================================
+# SUPABASE
+# =========================================================
+
 SUPABASE_URL = os.getenv(
     "SUPABASE_URL"
 )
@@ -84,10 +69,6 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv(
     "SUPABASE_SERVICE_ROLE_KEY"
 )
 
-
-# =========================================================
-# SUPABASE
-# =========================================================
 
 supabase = None
 
@@ -123,7 +104,7 @@ def verify_password(
 
 
 # =========================================================
-# JWT
+# AUTH
 # =========================================================
 
 security = HTTPBearer()
@@ -151,10 +132,6 @@ def create_access_token(
     )
 
 
-# =========================================================
-# DATABASE SESSION
-# =========================================================
-
 def get_db():
     db = SessionLocal()
 
@@ -164,10 +141,6 @@ def get_db():
     finally:
         db.close()
 
-
-# =========================================================
-# CURRENT USER
-# =========================================================
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(
@@ -215,7 +188,9 @@ def get_current_user(
 
     user = (
         db.query(User)
-        .filter(User.id == user_id)
+        .filter(
+            User.id == user_id
+        )
         .first()
     )
 
@@ -234,10 +209,6 @@ def get_current_user(
     return user
 
 
-# =========================================================
-# ADMIN CHECK
-# =========================================================
-
 def get_admin_user(
     current_user: User = Depends(
         get_current_user
@@ -253,7 +224,7 @@ def get_admin_user(
 
 
 # =========================================================
-# SCHEMAS
+# REQUEST MODELS
 # =========================================================
 
 class RegisterRequest(BaseModel):
@@ -275,8 +246,12 @@ class ArticleRequest(BaseModel):
     image: str | None = None
 
 
+class CommentRequest(BaseModel):
+    content: str
+
+
 # =========================================================
-# BASIC
+# ROOT
 # =========================================================
 
 @app.get("/")
@@ -318,7 +293,9 @@ def register(
 
     existing = (
         db.query(User)
-        .filter(User.nickname == nickname)
+        .filter(
+            User.nickname == nickname
+        )
         .first()
     )
 
@@ -330,7 +307,9 @@ def register(
 
     user = User(
         nickname=nickname,
-        password_hash=hash_password(password),
+        password_hash=hash_password(
+            password
+        ),
         is_admin=0,
         is_banned=0,
     )
@@ -363,7 +342,9 @@ def login(
 
     user = (
         db.query(User)
-        .filter(User.nickname == nickname)
+        .filter(
+            User.nickname == nickname
+        )
         .first()
     )
 
@@ -406,7 +387,7 @@ def login(
 
 
 # =========================================================
-# ME
+# CURRENT USER
 # =========================================================
 
 @app.get("/auth/me")
@@ -484,7 +465,8 @@ async def upload_image(
             filename,
             contents,
             {
-                "content-type": file.content_type,
+                "content-type":
+                    file.content_type,
                 "upsert": "false",
             },
         )
@@ -492,19 +474,24 @@ async def upload_image(
         public_url = (
             supabase.storage
             .from_(bucket_name)
-            .get_public_url(filename)
+            .get_public_url(
+                filename
+            )
         )
 
         return {
-            "message": "이미지가 업로드되었습니다.",
-            "image": public_url,
-            "image_url": public_url,
+            "message":
+                "이미지가 업로드되었습니다.",
+            "image":
+                public_url,
+            "image_url":
+                public_url,
         }
 
     except Exception as error:
         print(
             "IMAGE UPLOAD ERROR:",
-            error,
+            error
         )
 
         raise HTTPException(
@@ -547,7 +534,7 @@ def get_articles(
 
 
 # =========================================================
-# GET ONE ARTICLE
+# GET ARTICLE
 # =========================================================
 
 @app.get("/articles/{article_id}")
@@ -557,7 +544,9 @@ def get_article(
 ):
     article = (
         db.query(Article)
-        .filter(Article.id == article_id)
+        .filter(
+            Article.id == article_id
+        )
         .first()
     )
 
@@ -583,7 +572,6 @@ def get_article(
 
 # =========================================================
 # CREATE ARTICLE
-# 3분 도배 방지
 # =========================================================
 
 @app.post("/articles")
@@ -594,11 +582,9 @@ def create_article(
     ),
     db: Session = Depends(get_db),
 ):
-    now = datetime.now(timezone.utc)
-
-    # -----------------------------------------------------
-    # 3분 쿨타임 확인
-    # -----------------------------------------------------
+    now = datetime.now(
+        timezone.utc
+    )
 
     if current_user.last_article_created_at:
 
@@ -655,10 +641,6 @@ def create_article(
                 detail=message,
             )
 
-    # -----------------------------------------------------
-    # 기사 생성
-    # -----------------------------------------------------
-
     article = Article(
         title=request.title,
         subtitle=request.subtitle,
@@ -671,11 +653,9 @@ def create_article(
 
     db.add(article)
 
-    # 마지막 기사 작성 시간 기록
     current_user.last_article_created_at = now
 
     db.commit()
-
     db.refresh(article)
 
     return {
@@ -697,7 +677,6 @@ def create_article(
 
 # =========================================================
 # UPDATE ARTICLE
-# 본인 기사 또는 관리자만 수정 가능
 # =========================================================
 
 @app.put("/articles/{article_id}")
@@ -711,7 +690,9 @@ def update_article(
 ):
     article = (
         db.query(Article)
-        .filter(Article.id == article_id)
+        .filter(
+            Article.id == article_id
+        )
         .first()
     )
 
@@ -721,9 +702,9 @@ def update_article(
             detail="기사를 찾을 수 없습니다.",
         )
 
-    # 본인 기사 또는 관리자만 수정
     if (
-        article.owner_id != current_user.id
+        article.owner_id
+        != current_user.id
         and current_user.is_admin != 1
     ):
         raise HTTPException(
@@ -762,7 +743,6 @@ def update_article(
 
 # =========================================================
 # DELETE ARTICLE
-# 본인 기사 또는 관리자만 삭제 가능
 # =========================================================
 
 @app.delete("/articles/{article_id}")
@@ -775,7 +755,9 @@ def delete_article(
 ):
     article = (
         db.query(Article)
-        .filter(Article.id == article_id)
+        .filter(
+            Article.id == article_id
+        )
         .first()
     )
 
@@ -785,9 +767,9 @@ def delete_article(
             detail="기사를 찾을 수 없습니다.",
         )
 
-    # 본인 기사 또는 관리자만 삭제
     if (
-        article.owner_id != current_user.id
+        article.owner_id
+        != current_user.id
         and current_user.is_admin != 1
     ):
         raise HTTPException(
@@ -795,7 +777,15 @@ def delete_article(
             detail="삭제 권한이 없습니다.",
         )
 
+    # 기사 삭제 전에 댓글 삭제
+    db.query(Comment).filter(
+        Comment.article_id == article_id
+    ).delete(
+        synchronize_session=False
+    )
+
     db.delete(article)
+
     db.commit()
 
     return {
@@ -804,7 +794,238 @@ def delete_article(
 
 
 # =========================================================
-# ADMIN - USERS
+# GET COMMENTS
+# =========================================================
+
+@app.get("/articles/{article_id}/comments")
+def get_comments(
+    article_id: int,
+    db: Session = Depends(get_db),
+):
+    article = (
+        db.query(Article)
+        .filter(
+            Article.id == article_id
+        )
+        .first()
+    )
+
+    if not article:
+        raise HTTPException(
+            status_code=404,
+            detail="기사를 찾을 수 없습니다.",
+        )
+
+    comments = (
+        db.query(Comment, User)
+        .join(
+            User,
+            Comment.owner_id == User.id,
+        )
+        .filter(
+            Comment.article_id
+            == article_id
+        )
+        .order_by(
+            Comment.created_at.asc()
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": comment.id,
+            "content": comment.content,
+            "article_id":
+                comment.article_id,
+            "owner_id":
+                comment.owner_id,
+            "nickname":
+                user.nickname,
+            "created_at":
+                comment.created_at,
+        }
+        for comment, user in comments
+    ]
+
+
+# =========================================================
+# CREATE COMMENT
+# =========================================================
+
+@app.post("/articles/{article_id}/comments")
+def create_comment(
+    article_id: int,
+    request: CommentRequest,
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(get_db),
+):
+    article = (
+        db.query(Article)
+        .filter(
+            Article.id == article_id
+        )
+        .first()
+    )
+
+    if not article:
+        raise HTTPException(
+            status_code=404,
+            detail="기사를 찾을 수 없습니다.",
+        )
+
+    content = request.content.strip()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="댓글 내용을 입력해주세요.",
+        )
+
+    if len(content) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="댓글은 1000자 이하로 입력해주세요.",
+        )
+
+    # -----------------------------------------------------
+    # 최근 댓글 조회
+    # -----------------------------------------------------
+
+    last_comment = (
+        db.query(Comment)
+        .filter(
+            Comment.owner_id
+            == current_user.id
+        )
+        .order_by(
+            Comment.created_at.desc()
+        )
+        .first()
+    )
+
+    now = datetime.now(
+        timezone.utc
+    )
+
+    # -----------------------------------------------------
+    # 댓글 10초 쿨타임
+    # -----------------------------------------------------
+
+    if (
+        last_comment
+        and last_comment.created_at
+    ):
+        last_time = (
+            last_comment.created_at
+        )
+
+        if last_time.tzinfo is None:
+            last_time = last_time.replace(
+                tzinfo=timezone.utc
+            )
+
+        elapsed = (
+            now - last_time
+        )
+
+        cooldown = timedelta(
+            seconds=10
+        )
+
+        if elapsed < cooldown:
+
+            remaining_seconds = int(
+                (
+                    cooldown - elapsed
+                ).total_seconds()
+            )
+
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "댓글 도배 방지를 위해 "
+                    f"{remaining_seconds}초 후 "
+                    "다시 작성할 수 있습니다."
+                ),
+            )
+
+    comment = Comment(
+        content=content,
+        article_id=article_id,
+        owner_id=current_user.id,
+    )
+
+    db.add(comment)
+
+    db.commit()
+    db.refresh(comment)
+
+    return {
+        "message": "댓글이 작성되었습니다.",
+        "comment": {
+            "id": comment.id,
+            "content": comment.content,
+            "article_id":
+                comment.article_id,
+            "owner_id":
+                comment.owner_id,
+            "nickname":
+                current_user.nickname,
+            "created_at":
+                comment.created_at,
+        },
+    }
+
+
+# =========================================================
+# DELETE COMMENT
+# =========================================================
+
+@app.delete("/comments/{comment_id}")
+def delete_comment(
+    comment_id: int,
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(get_db),
+):
+    comment = (
+        db.query(Comment)
+        .filter(
+            Comment.id == comment_id
+        )
+        .first()
+    )
+
+    if not comment:
+        raise HTTPException(
+            status_code=404,
+            detail="댓글을 찾을 수 없습니다.",
+        )
+
+    if (
+        comment.owner_id
+        != current_user.id
+        and current_user.is_admin != 1
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="댓글 삭제 권한이 없습니다.",
+        )
+
+    db.delete(comment)
+    db.commit()
+
+    return {
+        "message": "댓글이 삭제되었습니다."
+    }
+
+
+# =========================================================
+# ADMIN USERS
 # =========================================================
 
 @app.get("/admin/users")
@@ -816,9 +1037,7 @@ def admin_users(
 ):
     users = (
         db.query(User)
-        .order_by(
-            User.id.asc()
-        )
+        .order_by(User.id.asc())
         .all()
     )
 
@@ -835,7 +1054,7 @@ def admin_users(
 
 
 # =========================================================
-# ADMIN - MAKE ADMIN
+# MAKE ADMIN
 # =========================================================
 
 @app.post("/admin/make-admin/{user_id}")
@@ -848,7 +1067,9 @@ def make_admin(
 ):
     user = (
         db.query(User)
-        .filter(User.id == user_id)
+        .filter(
+            User.id == user_id
+        )
         .first()
     )
 
@@ -864,7 +1085,8 @@ def make_admin(
     db.refresh(user)
 
     return {
-        "message": "관리자로 지정되었습니다.",
+        "message":
+            "관리자로 지정되었습니다.",
         "user": {
             "id": user.id,
             "nickname": user.nickname,
@@ -874,7 +1096,7 @@ def make_admin(
 
 
 # =========================================================
-# ADMIN - REMOVE ADMIN
+# REMOVE ADMIN
 # =========================================================
 
 @app.post("/admin/remove-admin/{user_id}")
@@ -887,7 +1109,9 @@ def remove_admin(
 ):
     user = (
         db.query(User)
-        .filter(User.id == user_id)
+        .filter(
+            User.id == user_id
+        )
         .first()
     )
 
@@ -897,7 +1121,6 @@ def remove_admin(
             detail="사용자를 찾을 수 없습니다.",
         )
 
-    # 자기 자신은 관리자 해제 방지
     if user.id == admin.id:
         raise HTTPException(
             status_code=400,
@@ -910,7 +1133,8 @@ def remove_admin(
     db.refresh(user)
 
     return {
-        "message": "관리자 권한이 해제되었습니다.",
+        "message":
+            "관리자 권한이 해제되었습니다.",
         "user": {
             "id": user.id,
             "nickname": user.nickname,
@@ -920,7 +1144,7 @@ def remove_admin(
 
 
 # =========================================================
-# ADMIN - BAN
+# BAN USER
 # =========================================================
 
 @app.post("/admin/ban/{user_id}")
@@ -933,7 +1157,9 @@ def ban_user(
 ):
     user = (
         db.query(User)
-        .filter(User.id == user_id)
+        .filter(
+            User.id == user_id
+        )
         .first()
     )
 
@@ -955,7 +1181,8 @@ def ban_user(
     db.refresh(user)
 
     return {
-        "message": "사용자가 정지되었습니다.",
+        "message":
+            "사용자가 정지되었습니다.",
         "user": {
             "id": user.id,
             "nickname": user.nickname,
@@ -965,7 +1192,7 @@ def ban_user(
 
 
 # =========================================================
-# ADMIN - UNBAN
+# UNBAN USER
 # =========================================================
 
 @app.post("/admin/unban/{user_id}")
@@ -978,7 +1205,9 @@ def unban_user(
 ):
     user = (
         db.query(User)
-        .filter(User.id == user_id)
+        .filter(
+            User.id == user_id
+        )
         .first()
     )
 
@@ -994,7 +1223,8 @@ def unban_user(
     db.refresh(user)
 
     return {
-        "message": "사용자 정지가 해제되었습니다.",
+        "message":
+            "사용자 정지가 해제되었습니다.",
         "user": {
             "id": user.id,
             "nickname": user.nickname,
@@ -1004,7 +1234,7 @@ def unban_user(
 
 
 # =========================================================
-# ADMIN - GET ALL ARTICLES
+# ADMIN ARTICLES
 # =========================================================
 
 @app.get("/admin/articles")
@@ -1040,7 +1270,7 @@ def admin_articles(
 
 
 # =========================================================
-# ADMIN - DELETE ARTICLE
+# ADMIN DELETE ARTICLE
 # =========================================================
 
 @app.delete("/admin/articles/{article_id}")
@@ -1053,7 +1283,9 @@ def admin_delete_article(
 ):
     article = (
         db.query(Article)
-        .filter(Article.id == article_id)
+        .filter(
+            Article.id == article_id
+        )
         .first()
     )
 
@@ -1063,7 +1295,15 @@ def admin_delete_article(
             detail="기사를 찾을 수 없습니다.",
         )
 
+    # 기사와 연결된 댓글 먼저 삭제
+    db.query(Comment).filter(
+        Comment.article_id == article_id
+    ).delete(
+        synchronize_session=False
+    )
+
     db.delete(article)
+
     db.commit()
 
     return {
