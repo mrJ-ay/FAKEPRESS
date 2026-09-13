@@ -42,6 +42,13 @@ class User(Base):
         server_default=func.now(),
     )
 
+    # 마지막 기사 작성 시간
+    # 도배 방지용 3분 쿨타임
+    last_article_created_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
 
 class Article(Base):
     __tablename__ = "articles"

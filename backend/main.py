@@ -1,5 +1,6 @@
 import os
 import uuid
+
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -10,70 +11,40 @@ from fastapi import (
     UploadFile,
     File,
 )
+
 from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from pydantic import BaseModel
+
 from sqlalchemy.orm import Session
-from jose import jwt, JWTError
+
+from jose import jwt
+
 from pwdlib import PasswordHash
-from supabase import create_client, Client
 
-from database import Base, engine, get_db
-from models import User, Article
-from schemas import (
-    RegisterRequest,
-    LoginRequest,
-    ArticleRequest,
-)
+from supabase import create_client
+
+from database import SessionLocal, engine
+
+from models import Base, User, Article
 
 
 # =========================================================
-# 기본 설정
+# DATABASE
 # =========================================================
 
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    "dev-only-change-me",
-)
-
-ALGORITHM = "HS256"
-
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
+Base.metadata.create_all(bind=engine)
 
 
 # =========================================================
-# Supabase
-# =========================================================
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv(
-    "SUPABASE_SERVICE_ROLE_KEY"
-)
-
-if not SUPABASE_URL:
-    raise RuntimeError(
-        "SUPABASE_URL 환경변수가 설정되지 않았습니다."
-    )
-
-if not SUPABASE_SERVICE_ROLE_KEY:
-    raise RuntimeError(
-        "SUPABASE_SERVICE_ROLE_KEY 환경변수가 설정되지 않았습니다."
-    )
-
-supabase: Client = create_client(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-)
-
-STORAGE_BUCKET = "article-images"
-
-
-# =========================================================
-# FastAPI
+# APP
 # =========================================================
 
 app = FastAPI(
     title="FAKEPRESS API",
+    description="FAKEPRESS Fake News API",
     version="1.0.0",
 )
 
@@ -84,11 +55,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://fakepress-1.onrender.com",
-        "http://localhost:5500",
-        "http://127.0.0.1:5500",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,19 +63,63 @@ app.add_middleware(
 
 
 # =========================================================
-# Database
+# ENV
 # =========================================================
 
-Base.metadata.create_all(
-    bind=engine
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "change-this-secret-key",
+)
+
+ALGORITHM = "HS256"
+
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
+
+
+SUPABASE_URL = os.getenv(
+    "SUPABASE_URL"
+)
+
+SUPABASE_SERVICE_ROLE_KEY = os.getenv(
+    "SUPABASE_SERVICE_ROLE_KEY"
 )
 
 
 # =========================================================
-# Password
+# SUPABASE
 # =========================================================
 
-password_hash = PasswordHash.recommended()
+supabase = None
+
+if (
+    SUPABASE_URL
+    and SUPABASE_SERVICE_ROLE_KEY
+):
+    supabase = create_client(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+    )
+
+
+# =========================================================
+# PASSWORD
+# =========================================================
+
+pwd_context = PasswordHash.recommended()
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(
+    password: str,
+    password_hash: str,
+) -> bool:
+    return pwd_context.verify(
+        password,
+        password_hash,
+    )
 
 
 # =========================================================
@@ -118,7 +129,9 @@ password_hash = PasswordHash.recommended()
 security = HTTPBearer()
 
 
-def create_access_token(user_id: int):
+def create_access_token(
+    user_id: int,
+):
     expire = (
         datetime.now(timezone.utc)
         + timedelta(
@@ -139,11 +152,27 @@ def create_access_token(user_id: int):
 
 
 # =========================================================
-# Current User
+# DATABASE SESSION
+# =========================================================
+
+def get_db():
+    db = SessionLocal()
+
+    try:
+        yield db
+
+    finally:
+        db.close()
+
+
+# =========================================================
+# CURRENT USER
 # =========================================================
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(
+        security
+    ),
     db: Session = Depends(get_db),
 ):
     token = credentials.credentials
@@ -163,12 +192,25 @@ def get_current_user(
                 detail="유효하지 않은 토큰입니다.",
             )
 
-        user_id = int(user_id)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="로그인이 만료되었습니다.",
+        )
 
-    except (JWTError, ValueError):
+    except jwt.JWTError:
         raise HTTPException(
             status_code=401,
             detail="유효하지 않은 토큰입니다.",
+        )
+
+    try:
+        user_id = int(user_id)
+
+    except ValueError:
+        raise HTTPException(
+            status_code=401,
+            detail="유효하지 않은 사용자입니다.",
         )
 
     user = (
@@ -183,21 +225,23 @@ def get_current_user(
             detail="사용자를 찾을 수 없습니다.",
         )
 
-    if user.is_banned:
+    if user.is_banned == 1:
         raise HTTPException(
             status_code=403,
-            detail="차단된 계정입니다.",
+            detail="정지된 계정입니다.",
         )
 
     return user
 
 
 # =========================================================
-# Admin
+# ADMIN CHECK
 # =========================================================
 
 def get_admin_user(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     if current_user.is_admin != 1:
         raise HTTPException(
@@ -209,7 +253,30 @@ def get_admin_user(
 
 
 # =========================================================
-# Root
+# SCHEMAS
+# =========================================================
+
+class RegisterRequest(BaseModel):
+    nickname: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    nickname: str
+    password: str
+
+
+class ArticleRequest(BaseModel):
+    title: str
+    subtitle: str = ""
+    author: str = ""
+    date: str = ""
+    content: str = ""
+    image: str | None = None
+
+
+# =========================================================
+# BASIC
 # =========================================================
 
 @app.get("/")
@@ -220,7 +287,7 @@ def root():
 
 
 # =========================================================
-# Register
+# REGISTER
 # =========================================================
 
 @app.post("/auth/register")
@@ -229,17 +296,24 @@ def register(
     db: Session = Depends(get_db),
 ):
     nickname = request.nickname.strip()
+    password = request.password
 
-    if len(nickname) < 2:
+    if not nickname:
         raise HTTPException(
             status_code=400,
-            detail="닉네임은 2자 이상이어야 합니다.",
+            detail="닉네임을 입력해주세요.",
         )
 
-    if len(request.password) < 4:
+    if len(nickname) > 20:
         raise HTTPException(
             status_code=400,
-            detail="비밀번호는 4자 이상이어야 합니다.",
+            detail="닉네임은 20자 이하로 입력해주세요.",
+        )
+
+    if not password:
+        raise HTTPException(
+            status_code=400,
+            detail="비밀번호를 입력해주세요.",
         )
 
     existing = (
@@ -256,9 +330,7 @@ def register(
 
     user = User(
         nickname=nickname,
-        password_hash=password_hash.hash(
-            request.password
-        ),
+        password_hash=hash_password(password),
         is_admin=0,
         is_banned=0,
     )
@@ -272,12 +344,14 @@ def register(
         "user": {
             "id": user.id,
             "nickname": user.nickname,
+            "is_admin": user.is_admin,
+            "is_banned": user.is_banned,
         },
     }
 
 
 # =========================================================
-# Login
+# LOGIN
 # =========================================================
 
 @app.post("/auth/login")
@@ -285,9 +359,11 @@ def login(
     request: LoginRequest,
     db: Session = Depends(get_db),
 ):
+    nickname = request.nickname.strip()
+
     user = (
         db.query(User)
-        .filter(User.nickname == request.nickname)
+        .filter(User.nickname == nickname)
         .first()
     )
 
@@ -297,27 +373,24 @@ def login(
             detail="닉네임 또는 비밀번호가 올바르지 않습니다.",
         )
 
-    if user.is_banned:
-        raise HTTPException(
-            status_code=403,
-            detail="차단된 계정입니다.",
-        )
-
-    try:
-        valid = password_hash.verify(
-            request.password,
-            user.password_hash,
-        )
-    except Exception:
-        valid = False
-
-    if not valid:
+    if not verify_password(
+        request.password,
+        user.password_hash,
+    ):
         raise HTTPException(
             status_code=401,
             detail="닉네임 또는 비밀번호가 올바르지 않습니다.",
         )
 
-    token = create_access_token(user.id)
+    if user.is_banned == 1:
+        raise HTTPException(
+            status_code=403,
+            detail="정지된 계정입니다.",
+        )
+
+    token = create_access_token(
+        user.id
+    )
 
     return {
         "message": "로그인되었습니다.",
@@ -327,45 +400,67 @@ def login(
             "id": user.id,
             "nickname": user.nickname,
             "is_admin": user.is_admin,
+            "is_banned": user.is_banned,
         },
     }
 
 
 # =========================================================
-# Me
+# ME
 # =========================================================
 
 @app.get("/auth/me")
 def me(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     return {
         "id": current_user.id,
         "nickname": current_user.nickname,
         "is_admin": current_user.is_admin,
         "is_banned": current_user.is_banned,
+        "created_at": current_user.created_at,
     }
 
 
 # =========================================================
-# Image Upload - Supabase Storage
+# IMAGE UPLOAD
 # =========================================================
 
 @app.post("/upload-image")
 async def upload_image(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
+    if supabase is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Supabase Storage가 설정되지 않았습니다.",
+        )
+
     if not file.content_type:
         raise HTTPException(
             status_code=400,
             detail="파일 형식을 확인할 수 없습니다.",
         )
 
-    if not file.content_type.startswith("image/"):
+    if not file.content_type.startswith(
+        "image/"
+    ):
         raise HTTPException(
             status_code=400,
             detail="이미지 파일만 업로드할 수 있습니다.",
+        )
+
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(
+            status_code=400,
+            detail="빈 파일입니다.",
         )
 
     extension = Path(
@@ -375,100 +470,51 @@ async def upload_image(
     if not extension:
         extension = ".jpg"
 
-    # 파일명 충돌 방지
     filename = (
         f"{uuid.uuid4().hex}"
         f"{extension}"
     )
 
-    # 사용자별 폴더
-    storage_path = (
-        f"{current_user.id}/{filename}"
-    )
+    bucket_name = "images"
 
     try:
-        contents = await file.read()
-
         supabase.storage.from_(
-            STORAGE_BUCKET
+            bucket_name
         ).upload(
-            storage_path,
+            filename,
             contents,
             {
                 "content-type": file.content_type,
-                "upsert": False,
+                "upsert": "false",
             },
         )
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"이미지 업로드 실패: {str(e)}",
-        )
-
-    # Public URL 생성
-    try:
         public_url = (
             supabase.storage
-            .from_(STORAGE_BUCKET)
-            .get_public_url(storage_path)
+            .from_(bucket_name)
+            .get_public_url(filename)
         )
-    except Exception as e:
+
+        return {
+            "message": "이미지가 업로드되었습니다.",
+            "image": public_url,
+            "image_url": public_url,
+        }
+
+    except Exception as error:
+        print(
+            "IMAGE UPLOAD ERROR:",
+            error,
+        )
+
         raise HTTPException(
             status_code=500,
-            detail=f"이미지 URL 생성 실패: {str(e)}",
+            detail="이미지 업로드에 실패했습니다.",
         )
 
-    return {
-        "message": "이미지 업로드 성공",
-        "url": public_url,
-        "path": storage_path,
-    }
-
 
 # =========================================================
-# Articles - Create
-# =========================================================
-
-@app.post("/articles")
-def create_article(
-    request: ArticleRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    article = Article(
-        title=request.title,
-        subtitle=request.subtitle,
-        author=request.author,
-        date=request.date,
-        content=request.content,
-        image=request.image,
-        owner_id=current_user.id,
-    )
-
-    db.add(article)
-    db.commit()
-    db.refresh(article)
-
-    return {
-        "message": "기사가 저장되었습니다.",
-        "article": {
-            "id": article.id,
-            "title": article.title,
-            "subtitle": article.subtitle,
-            "author": article.author,
-            "date": article.date,
-            "content": article.content,
-            "image": article.image,
-            "owner_id": article.owner_id,
-            "created_at": article.created_at,
-            "updated_at": article.updated_at,
-        },
-    }
-
-
-# =========================================================
-# Articles - List
+# GET ARTICLES
 # =========================================================
 
 @app.get("/articles")
@@ -501,7 +547,7 @@ def get_articles(
 
 
 # =========================================================
-# Articles - One
+# GET ONE ARTICLE
 # =========================================================
 
 @app.get("/articles/{article_id}")
@@ -536,14 +582,131 @@ def get_article(
 
 
 # =========================================================
-# Articles - Update
+# CREATE ARTICLE
+# 3분 도배 방지
+# =========================================================
+
+@app.post("/articles")
+def create_article(
+    request: ArticleRequest,
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+
+    # -----------------------------------------------------
+    # 3분 쿨타임 확인
+    # -----------------------------------------------------
+
+    if current_user.last_article_created_at:
+
+        last_time = (
+            current_user.last_article_created_at
+        )
+
+        if last_time.tzinfo is None:
+            last_time = last_time.replace(
+                tzinfo=timezone.utc
+            )
+
+        elapsed = now - last_time
+
+        cooldown = timedelta(
+            minutes=3
+        )
+
+        if elapsed < cooldown:
+
+            remaining = (
+                cooldown - elapsed
+            )
+
+            remaining_seconds = int(
+                remaining.total_seconds()
+            )
+
+            minutes = (
+                remaining_seconds // 60
+            )
+
+            seconds = (
+                remaining_seconds % 60
+            )
+
+            if minutes > 0:
+                message = (
+                    "도배 방지를 위해 "
+                    f"{minutes}분 "
+                    f"{seconds}초 후에 "
+                    "다시 기사를 작성할 수 있습니다."
+                )
+
+            else:
+                message = (
+                    "도배 방지를 위해 "
+                    f"{seconds}초 후에 "
+                    "다시 기사를 작성할 수 있습니다."
+                )
+
+            raise HTTPException(
+                status_code=429,
+                detail=message,
+            )
+
+    # -----------------------------------------------------
+    # 기사 생성
+    # -----------------------------------------------------
+
+    article = Article(
+        title=request.title,
+        subtitle=request.subtitle,
+        author=request.author,
+        date=request.date,
+        content=request.content,
+        image=request.image,
+        owner_id=current_user.id,
+    )
+
+    db.add(article)
+
+    # 마지막 기사 작성 시간 기록
+    current_user.last_article_created_at = now
+
+    db.commit()
+
+    db.refresh(article)
+
+    return {
+        "message": "기사가 저장되었습니다.",
+        "article": {
+            "id": article.id,
+            "title": article.title,
+            "subtitle": article.subtitle,
+            "author": article.author,
+            "date": article.date,
+            "content": article.content,
+            "image": article.image,
+            "owner_id": article.owner_id,
+            "created_at": article.created_at,
+            "updated_at": article.updated_at,
+        },
+    }
+
+
+# =========================================================
+# UPDATE ARTICLE
+# 본인 기사 또는 관리자만 수정 가능
 # =========================================================
 
 @app.put("/articles/{article_id}")
 def update_article(
     article_id: int,
     request: ArticleRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
     article = (
@@ -558,6 +721,7 @@ def update_article(
             detail="기사를 찾을 수 없습니다.",
         )
 
+    # 본인 기사 또는 관리자만 수정
     if (
         article.owner_id != current_user.id
         and current_user.is_admin != 1
@@ -572,7 +736,9 @@ def update_article(
     article.author = request.author
     article.date = request.date
     article.content = request.content
-    article.image = request.image
+
+    if request.image is not None:
+        article.image = request.image
 
     db.commit()
     db.refresh(article)
@@ -595,13 +761,16 @@ def update_article(
 
 
 # =========================================================
-# Articles - Delete
+# DELETE ARTICLE
+# 본인 기사 또는 관리자만 삭제 가능
 # =========================================================
 
 @app.delete("/articles/{article_id}")
 def delete_article(
     article_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
     article = (
@@ -616,6 +785,7 @@ def delete_article(
             detail="기사를 찾을 수 없습니다.",
         )
 
+    # 본인 기사 또는 관리자만 삭제
     if (
         article.owner_id != current_user.id
         and current_user.is_admin != 1
@@ -625,7 +795,6 @@ def delete_article(
             detail="삭제 권한이 없습니다.",
         )
 
-    # 현재는 Storage의 이미지 파일은 유지
     db.delete(article)
     db.commit()
 
@@ -635,17 +804,21 @@ def delete_article(
 
 
 # =========================================================
-# Admin - Users
+# ADMIN - USERS
 # =========================================================
 
 @app.get("/admin/users")
 def admin_users(
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(
+        get_admin_user
+    ),
     db: Session = Depends(get_db),
 ):
     users = (
         db.query(User)
-        .order_by(User.id.asc())
+        .order_by(
+            User.id.asc()
+        )
         .all()
     )
 
@@ -662,13 +835,15 @@ def admin_users(
 
 
 # =========================================================
-# Admin - Make Admin
+# ADMIN - MAKE ADMIN
 # =========================================================
 
 @app.post("/admin/make-admin/{user_id}")
 def make_admin(
     user_id: int,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(
+        get_admin_user
+    ),
     db: Session = Depends(get_db),
 ):
     user = (
@@ -699,13 +874,15 @@ def make_admin(
 
 
 # =========================================================
-# Admin - Remove Admin
+# ADMIN - REMOVE ADMIN
 # =========================================================
 
 @app.post("/admin/remove-admin/{user_id}")
 def remove_admin(
     user_id: int,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(
+        get_admin_user
+    ),
     db: Session = Depends(get_db),
 ):
     user = (
@@ -720,13 +897,20 @@ def remove_admin(
             detail="사용자를 찾을 수 없습니다.",
         )
 
+    # 자기 자신은 관리자 해제 방지
+    if user.id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="자기 자신의 관리자 권한은 해제할 수 없습니다.",
+        )
+
     user.is_admin = 0
 
     db.commit()
     db.refresh(user)
 
     return {
-        "message": "관리자 권한이 제거되었습니다.",
+        "message": "관리자 권한이 해제되었습니다.",
         "user": {
             "id": user.id,
             "nickname": user.nickname,
@@ -736,13 +920,15 @@ def remove_admin(
 
 
 # =========================================================
-# Admin - Ban
+# ADMIN - BAN
 # =========================================================
 
 @app.post("/admin/ban/{user_id}")
 def ban_user(
     user_id: int,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(
+        get_admin_user
+    ),
     db: Session = Depends(get_db),
 ):
     user = (
@@ -757,23 +943,37 @@ def ban_user(
             detail="사용자를 찾을 수 없습니다.",
         )
 
+    if user.id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="자기 자신을 정지할 수 없습니다.",
+        )
+
     user.is_banned = 1
 
     db.commit()
+    db.refresh(user)
 
     return {
-        "message": "사용자가 차단되었습니다."
+        "message": "사용자가 정지되었습니다.",
+        "user": {
+            "id": user.id,
+            "nickname": user.nickname,
+            "is_banned": user.is_banned,
+        },
     }
 
 
 # =========================================================
-# Admin - Unban
+# ADMIN - UNBAN
 # =========================================================
 
 @app.post("/admin/unban/{user_id}")
 def unban_user(
     user_id: int,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(
+        get_admin_user
+    ),
     db: Session = Depends(get_db),
 ):
     user = (
@@ -791,19 +991,27 @@ def unban_user(
     user.is_banned = 0
 
     db.commit()
+    db.refresh(user)
 
     return {
-        "message": "사용자 차단이 해제되었습니다."
+        "message": "사용자 정지가 해제되었습니다.",
+        "user": {
+            "id": user.id,
+            "nickname": user.nickname,
+            "is_banned": user.is_banned,
+        },
     }
 
 
 # =========================================================
-# Admin - Articles
+# ADMIN - GET ALL ARTICLES
 # =========================================================
 
 @app.get("/admin/articles")
 def admin_articles(
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(
+        get_admin_user
+    ),
     db: Session = Depends(get_db),
 ):
     articles = (
@@ -832,13 +1040,15 @@ def admin_articles(
 
 
 # =========================================================
-# Admin - Delete Article
+# ADMIN - DELETE ARTICLE
 # =========================================================
 
 @app.delete("/admin/articles/{article_id}")
 def admin_delete_article(
     article_id: int,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(
+        get_admin_user
+    ),
     db: Session = Depends(get_db),
 ):
     article = (
@@ -857,5 +1067,5 @@ def admin_delete_article(
     db.commit()
 
     return {
-        "message": "관리자 권한으로 기사가 삭제되었습니다."
+        "message": "기사가 삭제되었습니다."
     }
