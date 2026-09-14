@@ -44,9 +44,9 @@ with engine.begin() as connection:
         text(
             """
             CREATE TABLE IF NOT EXISTS banned_words (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 word VARCHAR(100) NOT NULL UNIQUE,
-                created_at DATETIME
+                created_at TIMESTAMP WITH TIME ZONE
             )
             """
         )
