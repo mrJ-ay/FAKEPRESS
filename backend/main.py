@@ -14,8 +14,12 @@ from fastapi import (
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from pydantic import BaseModel
+
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+
 from jose import jwt
 from pwdlib import PasswordHash
 from supabase import create_client
@@ -24,8 +28,34 @@ from database import SessionLocal, engine
 from models import Base, User, Article, Comment
 
 
+# =========================================================
+# DATABASE
+# =========================================================
+
 Base.metadata.create_all(bind=engine)
 
+
+# =========================================================
+# BANNED WORD TABLE
+# =========================================================
+
+with engine.begin() as connection:
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS banned_words (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word VARCHAR(100) NOT NULL UNIQUE,
+                created_at DATETIME
+            )
+            """
+        )
+    )
+
+
+# =========================================================
+# FASTAPI
+# =========================================================
 
 app = FastAPI(
     title="FAKEPRESS API",
@@ -33,6 +63,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
+# =========================================================
+# CORS
+# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,6 +106,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv(
 
 supabase = None
 
+
 if (
     SUPABASE_URL
     and SUPABASE_SERVICE_ROLE_KEY
@@ -89,14 +124,20 @@ if (
 pwd_context = PasswordHash.recommended()
 
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+def hash_password(
+    password: str,
+) -> str:
+
+    return pwd_context.hash(
+        password
+    )
 
 
 def verify_password(
     password: str,
     password_hash: str,
 ) -> bool:
+
     return pwd_context.verify(
         password,
         password_hash,
@@ -113,6 +154,7 @@ security = HTTPBearer()
 def create_access_token(
     user_id: int,
 ):
+
     expire = (
         datetime.now(timezone.utc)
         + timedelta(
@@ -133,6 +175,7 @@ def create_access_token(
 
 
 def get_db():
+
     db = SessionLocal()
 
     try:
@@ -148,9 +191,11 @@ def get_current_user(
     ),
     db: Session = Depends(get_db),
 ):
+
     token = credentials.credentials
 
     try:
+
         payload = jwt.decode(
             token,
             SECRET_KEY,
@@ -160,27 +205,32 @@ def get_current_user(
         user_id = payload.get("sub")
 
         if not user_id:
+
             raise HTTPException(
                 status_code=401,
                 detail="유효하지 않은 토큰입니다.",
             )
 
     except jwt.ExpiredSignatureError:
+
         raise HTTPException(
             status_code=401,
             detail="로그인이 만료되었습니다.",
         )
 
     except jwt.JWTError:
+
         raise HTTPException(
             status_code=401,
             detail="유효하지 않은 토큰입니다.",
         )
 
     try:
+
         user_id = int(user_id)
 
     except ValueError:
+
         raise HTTPException(
             status_code=401,
             detail="유효하지 않은 사용자입니다.",
@@ -195,12 +245,14 @@ def get_current_user(
     )
 
     if not user:
+
         raise HTTPException(
             status_code=401,
             detail="사용자를 찾을 수 없습니다.",
         )
 
     if user.is_banned == 1:
+
         raise HTTPException(
             status_code=403,
             detail="정지된 계정입니다.",
@@ -214,7 +266,9 @@ def get_admin_user(
         get_current_user
     ),
 ):
+
     if current_user.is_admin != 1:
+
         raise HTTPException(
             status_code=403,
             detail="관리자만 사용할 수 있습니다.",
@@ -224,20 +278,122 @@ def get_admin_user(
 
 
 # =========================================================
+# BANNED WORD HELPERS
+# =========================================================
+
+def get_banned_words(
+    db: Session,
+):
+
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                id,
+                word,
+                created_at
+            FROM banned_words
+            ORDER BY id ASC
+            """
+        )
+    ).mappings().all()
+
+    return rows
+
+
+def find_banned_word(
+    db: Session,
+    title: str = "",
+    subtitle: str = "",
+    content: str = "",
+):
+
+    combined_text = " ".join(
+        [
+            title or "",
+            subtitle or "",
+            content or "",
+        ]
+    ).casefold()
+
+    rows = get_banned_words(db)
+
+    for row in rows:
+
+        banned_word = (
+            row["word"] or ""
+        ).strip()
+
+        if not banned_word:
+            continue
+
+        if (
+            banned_word.casefold()
+            in combined_text
+        ):
+            return banned_word
+
+    return None
+
+
+def delete_articles_containing_word(
+    db: Session,
+    banned_word: str,
+):
+
+    articles = (
+        db.query(Article)
+        .all()
+    )
+
+    target = banned_word.casefold()
+
+    deleted_count = 0
+
+    for article in articles:
+
+        combined_text = " ".join(
+            [
+                article.title or "",
+                article.subtitle or "",
+                article.content or "",
+            ]
+        ).casefold()
+
+        if target in combined_text:
+
+            db.query(Comment).filter(
+                Comment.article_id
+                == article.id
+            ).delete(
+                synchronize_session=False
+            )
+
+            db.delete(article)
+
+            deleted_count += 1
+
+    return deleted_count
+
+
+# =========================================================
 # REQUEST MODELS
 # =========================================================
 
 class RegisterRequest(BaseModel):
+
     nickname: str
     password: str
 
 
 class LoginRequest(BaseModel):
+
     nickname: str
     password: str
 
 
 class ArticleRequest(BaseModel):
+
     title: str
     subtitle: str = ""
     author: str = ""
@@ -247,7 +403,13 @@ class ArticleRequest(BaseModel):
 
 
 class CommentRequest(BaseModel):
+
     content: str
+
+
+class BannedWordRequest(BaseModel):
+
+    word: str
 
 
 # =========================================================
@@ -256,6 +418,7 @@ class CommentRequest(BaseModel):
 
 @app.get("/")
 def root():
+
     return {
         "message": "FAKEPRESS API is running"
     }
@@ -270,22 +433,26 @@ def register(
     request: RegisterRequest,
     db: Session = Depends(get_db),
 ):
+
     nickname = request.nickname.strip()
     password = request.password
 
     if not nickname:
+
         raise HTTPException(
             status_code=400,
             detail="닉네임을 입력해주세요.",
         )
 
     if len(nickname) > 20:
+
         raise HTTPException(
             status_code=400,
             detail="닉네임은 20자 이하로 입력해주세요.",
         )
 
     if not password:
+
         raise HTTPException(
             status_code=400,
             detail="비밀번호를 입력해주세요.",
@@ -300,6 +467,7 @@ def register(
     )
 
     if existing:
+
         raise HTTPException(
             status_code=400,
             detail="이미 존재하는 닉네임입니다.",
@@ -315,7 +483,9 @@ def register(
     )
 
     db.add(user)
+
     db.commit()
+
     db.refresh(user)
 
     return {
@@ -338,6 +508,7 @@ def login(
     request: LoginRequest,
     db: Session = Depends(get_db),
 ):
+
     nickname = request.nickname.strip()
 
     user = (
@@ -349,6 +520,7 @@ def login(
     )
 
     if not user:
+
         raise HTTPException(
             status_code=401,
             detail="닉네임 또는 비밀번호가 올바르지 않습니다.",
@@ -358,12 +530,14 @@ def login(
         request.password,
         user.password_hash,
     ):
+
         raise HTTPException(
             status_code=401,
             detail="닉네임 또는 비밀번호가 올바르지 않습니다.",
         )
 
     if user.is_banned == 1:
+
         raise HTTPException(
             status_code=403,
             detail="정지된 계정입니다.",
@@ -396,6 +570,7 @@ def me(
         get_current_user
     ),
 ):
+
     return {
         "id": current_user.id,
         "nickname": current_user.nickname,
@@ -416,13 +591,16 @@ async def upload_image(
         get_current_user
     ),
 ):
+
     if supabase is None:
+
         raise HTTPException(
             status_code=500,
             detail="Supabase Storage가 설정되지 않았습니다.",
         )
 
     if not file.content_type:
+
         raise HTTPException(
             status_code=400,
             detail="파일 형식을 확인할 수 없습니다.",
@@ -431,6 +609,7 @@ async def upload_image(
     if not file.content_type.startswith(
         "image/"
     ):
+
         raise HTTPException(
             status_code=400,
             detail="이미지 파일만 업로드할 수 있습니다.",
@@ -439,6 +618,7 @@ async def upload_image(
     contents = await file.read()
 
     if not contents:
+
         raise HTTPException(
             status_code=400,
             detail="빈 파일입니다.",
@@ -459,6 +639,7 @@ async def upload_image(
     bucket_name = "images"
 
     try:
+
         supabase.storage.from_(
             bucket_name
         ).upload(
@@ -489,6 +670,7 @@ async def upload_image(
         }
 
     except Exception as error:
+
         print(
             "IMAGE UPLOAD ERROR:",
             error
@@ -508,6 +690,7 @@ async def upload_image(
 def get_articles(
     db: Session = Depends(get_db),
 ):
+
     articles = (
         db.query(Article)
         .order_by(
@@ -542,6 +725,7 @@ def get_article(
     article_id: int,
     db: Session = Depends(get_db),
 ):
+
     article = (
         db.query(Article)
         .filter(
@@ -551,6 +735,7 @@ def get_article(
     )
 
     if not article:
+
         raise HTTPException(
             status_code=404,
             detail="기사를 찾을 수 없습니다.",
@@ -582,6 +767,32 @@ def create_article(
     ),
     db: Session = Depends(get_db),
 ):
+
+    # -----------------------------------------------------
+    # 금지어 검사
+    # -----------------------------------------------------
+
+    banned_word = find_banned_word(
+        db,
+        request.title,
+        request.subtitle,
+        request.content,
+    )
+
+    if banned_word:
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'금지어 "{banned_word}"가 포함되어 있어 '
+                "기사를 등록할 수 없습니다."
+            ),
+        )
+
+    # -----------------------------------------------------
+    # 기사 작성 쿨타임
+    # -----------------------------------------------------
+
     now = datetime.now(
         timezone.utc
     )
@@ -593,6 +804,7 @@ def create_article(
         )
 
         if last_time.tzinfo is None:
+
             last_time = last_time.replace(
                 tzinfo=timezone.utc
             )
@@ -622,6 +834,7 @@ def create_article(
             )
 
             if minutes > 0:
+
                 message = (
                     "도배 방지를 위해 "
                     f"{minutes}분 "
@@ -630,6 +843,7 @@ def create_article(
                 )
 
             else:
+
                 message = (
                     "도배 방지를 위해 "
                     f"{seconds}초 후에 "
@@ -640,6 +854,10 @@ def create_article(
                 status_code=429,
                 detail=message,
             )
+
+    # -----------------------------------------------------
+    # 기사 생성
+    # -----------------------------------------------------
 
     article = Article(
         title=request.title,
@@ -656,6 +874,7 @@ def create_article(
     current_user.last_article_created_at = now
 
     db.commit()
+
     db.refresh(article)
 
     return {
@@ -688,6 +907,7 @@ def update_article(
     ),
     db: Session = Depends(get_db),
 ):
+
     article = (
         db.query(Article)
         .filter(
@@ -697,6 +917,7 @@ def update_article(
     )
 
     if not article:
+
         raise HTTPException(
             status_code=404,
             detail="기사를 찾을 수 없습니다.",
@@ -707,9 +928,31 @@ def update_article(
         != current_user.id
         and current_user.is_admin != 1
     ):
+
         raise HTTPException(
             status_code=403,
             detail="수정 권한이 없습니다.",
+        )
+
+    # -----------------------------------------------------
+    # 금지어 검사
+    # -----------------------------------------------------
+
+    banned_word = find_banned_word(
+        db,
+        request.title,
+        request.subtitle,
+        request.content,
+    )
+
+    if banned_word:
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'금지어 "{banned_word}"가 포함되어 있어 '
+                "기사를 수정할 수 없습니다."
+            ),
         )
 
     article.title = request.title
@@ -719,9 +962,11 @@ def update_article(
     article.content = request.content
 
     if request.image is not None:
+
         article.image = request.image
 
     db.commit()
+
     db.refresh(article)
 
     return {
@@ -753,6 +998,7 @@ def delete_article(
     ),
     db: Session = Depends(get_db),
 ):
+
     article = (
         db.query(Article)
         .filter(
@@ -762,6 +1008,7 @@ def delete_article(
     )
 
     if not article:
+
         raise HTTPException(
             status_code=404,
             detail="기사를 찾을 수 없습니다.",
@@ -772,12 +1019,12 @@ def delete_article(
         != current_user.id
         and current_user.is_admin != 1
     ):
+
         raise HTTPException(
             status_code=403,
             detail="삭제 권한이 없습니다.",
         )
 
-    # 기사 삭제 전에 댓글 삭제
     db.query(Comment).filter(
         Comment.article_id == article_id
     ).delete(
@@ -802,6 +1049,7 @@ def get_comments(
     article_id: int,
     db: Session = Depends(get_db),
 ):
+
     article = (
         db.query(Article)
         .filter(
@@ -811,6 +1059,7 @@ def get_comments(
     )
 
     if not article:
+
         raise HTTPException(
             status_code=404,
             detail="기사를 찾을 수 없습니다.",
@@ -862,6 +1111,7 @@ def create_comment(
     ),
     db: Session = Depends(get_db),
 ):
+
     article = (
         db.query(Article)
         .filter(
@@ -871,6 +1121,7 @@ def create_comment(
     )
 
     if not article:
+
         raise HTTPException(
             status_code=404,
             detail="기사를 찾을 수 없습니다.",
@@ -879,12 +1130,14 @@ def create_comment(
     content = request.content.strip()
 
     if not content:
+
         raise HTTPException(
             status_code=400,
             detail="댓글 내용을 입력해주세요.",
         )
 
     if len(content) > 1000:
+
         raise HTTPException(
             status_code=400,
             detail="댓글은 1000자 이하로 입력해주세요.",
@@ -918,11 +1171,13 @@ def create_comment(
         last_comment
         and last_comment.created_at
     ):
+
         last_time = (
             last_comment.created_at
         )
 
         if last_time.tzinfo is None:
+
             last_time = last_time.replace(
                 tzinfo=timezone.utc
             )
@@ -961,6 +1216,7 @@ def create_comment(
     db.add(comment)
 
     db.commit()
+
     db.refresh(comment)
 
     return {
@@ -992,6 +1248,7 @@ def delete_comment(
     ),
     db: Session = Depends(get_db),
 ):
+
     comment = (
         db.query(Comment)
         .filter(
@@ -1001,6 +1258,7 @@ def delete_comment(
     )
 
     if not comment:
+
         raise HTTPException(
             status_code=404,
             detail="댓글을 찾을 수 없습니다.",
@@ -1011,12 +1269,14 @@ def delete_comment(
         != current_user.id
         and current_user.is_admin != 1
     ):
+
         raise HTTPException(
             status_code=403,
             detail="댓글 삭제 권한이 없습니다.",
         )
 
     db.delete(comment)
+
     db.commit()
 
     return {
@@ -1035,9 +1295,12 @@ def admin_users(
     ),
     db: Session = Depends(get_db),
 ):
+
     users = (
         db.query(User)
-        .order_by(User.id.asc())
+        .order_by(
+            User.id.asc()
+        )
         .all()
     )
 
@@ -1065,6 +1328,7 @@ def make_admin(
     ),
     db: Session = Depends(get_db),
 ):
+
     user = (
         db.query(User)
         .filter(
@@ -1074,6 +1338,7 @@ def make_admin(
     )
 
     if not user:
+
         raise HTTPException(
             status_code=404,
             detail="사용자를 찾을 수 없습니다.",
@@ -1082,6 +1347,7 @@ def make_admin(
     user.is_admin = 1
 
     db.commit()
+
     db.refresh(user)
 
     return {
@@ -1107,6 +1373,7 @@ def remove_admin(
     ),
     db: Session = Depends(get_db),
 ):
+
     user = (
         db.query(User)
         .filter(
@@ -1116,12 +1383,14 @@ def remove_admin(
     )
 
     if not user:
+
         raise HTTPException(
             status_code=404,
             detail="사용자를 찾을 수 없습니다.",
         )
 
     if user.id == admin.id:
+
         raise HTTPException(
             status_code=400,
             detail="자기 자신의 관리자 권한은 해제할 수 없습니다.",
@@ -1130,6 +1399,7 @@ def remove_admin(
     user.is_admin = 0
 
     db.commit()
+
     db.refresh(user)
 
     return {
@@ -1155,6 +1425,7 @@ def ban_user(
     ),
     db: Session = Depends(get_db),
 ):
+
     user = (
         db.query(User)
         .filter(
@@ -1164,12 +1435,14 @@ def ban_user(
     )
 
     if not user:
+
         raise HTTPException(
             status_code=404,
             detail="사용자를 찾을 수 없습니다.",
         )
 
     if user.id == admin.id:
+
         raise HTTPException(
             status_code=400,
             detail="자기 자신을 정지할 수 없습니다.",
@@ -1178,6 +1451,7 @@ def ban_user(
     user.is_banned = 1
 
     db.commit()
+
     db.refresh(user)
 
     return {
@@ -1203,6 +1477,7 @@ def unban_user(
     ),
     db: Session = Depends(get_db),
 ):
+
     user = (
         db.query(User)
         .filter(
@@ -1212,6 +1487,7 @@ def unban_user(
     )
 
     if not user:
+
         raise HTTPException(
             status_code=404,
             detail="사용자를 찾을 수 없습니다.",
@@ -1220,6 +1496,7 @@ def unban_user(
     user.is_banned = 0
 
     db.commit()
+
     db.refresh(user)
 
     return {
@@ -1234,6 +1511,201 @@ def unban_user(
 
 
 # =========================================================
+# ADMIN BANNED WORDS
+# =========================================================
+
+@app.get("/admin/banned-words")
+def admin_get_banned_words(
+    admin: User = Depends(
+        get_admin_user
+    ),
+    db: Session = Depends(get_db),
+):
+
+    rows = get_banned_words(db)
+
+    return [
+        {
+            "id": row["id"],
+            "word": row["word"],
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+# =========================================================
+# ADD BANNED WORD
+# =========================================================
+
+@app.post("/admin/banned-words")
+def admin_add_banned_word(
+    request: BannedWordRequest,
+    admin: User = Depends(
+        get_admin_user
+    ),
+    db: Session = Depends(get_db),
+):
+
+    word = request.word.strip()
+
+    if not word:
+
+        raise HTTPException(
+            status_code=400,
+            detail="금지어를 입력해주세요.",
+        )
+
+    if len(word) > 100:
+
+        raise HTTPException(
+            status_code=400,
+            detail="금지어는 100자 이하로 입력해주세요.",
+        )
+
+    # -----------------------------------------------------
+    # 중복 검사
+    # -----------------------------------------------------
+
+    existing_rows = get_banned_words(db)
+
+    for row in existing_rows:
+
+        existing_word = (
+            row["word"] or ""
+        ).strip()
+
+        if (
+            existing_word.casefold()
+            == word.casefold()
+        ):
+
+            raise HTTPException(
+                status_code=400,
+                detail="이미 등록된 금지어입니다.",
+            )
+
+    # -----------------------------------------------------
+    # 금지어 저장
+    # -----------------------------------------------------
+
+    try:
+
+        db.execute(
+            text(
+                """
+                INSERT INTO banned_words
+                (
+                    word,
+                    created_at
+                )
+                VALUES
+                (
+                    :word,
+                    :created_at
+                )
+                """
+            ),
+            {
+                "word": word,
+                "created_at":
+                    datetime.now(
+                        timezone.utc
+                    ),
+            },
+        )
+
+        db.commit()
+
+    except Exception:
+
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="금지어 저장에 실패했습니다.",
+        )
+
+    # -----------------------------------------------------
+    # 기존 기사 자동 삭제
+    # -----------------------------------------------------
+
+    deleted_count = (
+        delete_articles_containing_word(
+            db,
+            word,
+        )
+    )
+
+    db.commit()
+
+    return {
+        "message": (
+            f'"{word}" 금지어가 등록되었습니다.'
+        ),
+        "word": word,
+        "deleted_articles":
+            deleted_count,
+    }
+
+
+# =========================================================
+# DELETE BANNED WORD
+# =========================================================
+
+@app.delete("/admin/banned-words/{word_id}")
+def admin_delete_banned_word(
+    word_id: int,
+    admin: User = Depends(
+        get_admin_user
+    ),
+    db: Session = Depends(get_db),
+):
+
+    row = db.execute(
+        text(
+            """
+            SELECT
+                id,
+                word
+            FROM banned_words
+            WHERE id = :id
+            """
+        ),
+        {
+            "id": word_id
+        },
+    ).mappings().first()
+
+    if not row:
+
+        raise HTTPException(
+            status_code=404,
+            detail="금지어를 찾을 수 없습니다.",
+        )
+
+    db.execute(
+        text(
+            """
+            DELETE FROM banned_words
+            WHERE id = :id
+            """
+        ),
+        {
+            "id": word_id
+        },
+    )
+
+    db.commit()
+
+    return {
+        "message": (
+            f'"{row["word"]}" 금지어가 삭제되었습니다.'
+        )
+    }
+
+
+# =========================================================
 # ADMIN ARTICLES
 # =========================================================
 
@@ -1244,6 +1716,7 @@ def admin_articles(
     ),
     db: Session = Depends(get_db),
 ):
+
     articles = (
         db.query(Article)
         .order_by(
@@ -1281,6 +1754,7 @@ def admin_delete_article(
     ),
     db: Session = Depends(get_db),
 ):
+
     article = (
         db.query(Article)
         .filter(
@@ -1290,12 +1764,12 @@ def admin_delete_article(
     )
 
     if not article:
+
         raise HTTPException(
             status_code=404,
             detail="기사를 찾을 수 없습니다.",
         )
 
-    # 기사와 연결된 댓글 먼저 삭제
     db.query(Comment).filter(
         Comment.article_id == article_id
     ).delete(
@@ -1322,22 +1796,29 @@ def admin_delete_all_articles(
     ),
     db: Session = Depends(get_db),
 ):
-    # 모든 댓글 먼저 삭제
+
+    articles = (
+        db.query(Article)
+        .all()
+    )
+
+    deleted_count = len(
+        articles
+    )
+
     db.query(Comment).delete(
         synchronize_session=False
     )
 
-    # 모든 기사 삭제
-    deleted_count = (
-        db.query(Article).delete(
-            synchronize_session=False
-        )
+    db.query(Article).delete(
+        synchronize_session=False
     )
 
     db.commit()
 
     return {
         "message":
-            f"모든 뉴스가 삭제되었습니다. "
-            f"({deleted_count}개 삭제)"
+            "모든 뉴스가 삭제되었습니다.",
+        "deleted_count":
+            deleted_count,
     }
