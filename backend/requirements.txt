@@ -6,4 +6,5 @@ pwdlib[argon2]
 bcrypt
 python-multipart
 psycopg2-binary
+psycopg[binary]
 supabase
