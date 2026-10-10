@@ -1,5 +1,10 @@
-const API_URL = "https://fakepress.onrender.com";
+const API_URL = window.FAKEPRESS_API_URL || "https://fakepress.onrender.com";
+const ONEID_API_URL = window.ONEID_API_URL || "http://127.0.0.1:8000";
+const ONEID_CLIENT_ID = window.ONEID_CLIENT_ID || "fakepress";
 const TOKEN_KEY = "fakepress_token";
+const ONEID_VERIFIER_KEY = "fakepress_oneid_verifier";
+const ONEID_STATE_KEY = "fakepress_oneid_state";
+const ONEID_PENDING_TOKEN_KEY = "fakepress_oneid_pending_token";
 
 let allArticles = [];
 let currentArticleId = null;
@@ -94,9 +99,7 @@ function showPage(pageId) {
 
 
 function showLogin() {
-    showPage(
-        "loginPage"
-    );
+    beginOneIDLogin();
 }
 
 
@@ -148,134 +151,89 @@ async function showArticles() {
 }
 
 
-// =========================================================
-// REGISTER
-// =========================================================
-
-async function registerUser() {
-    const nickname =
-        document.getElementById(
-            "loginNickname"
-        ).value.trim();
-
-    const password =
-        document.getElementById(
-            "loginPassword"
-        ).value;
-
-    if (!nickname || !password) {
-        alert(
-            "닉네임과 비밀번호를 입력하세요."
-        );
-
-        return;
-    }
-
-    try {
-        const response =
-            await fetch(
-                `${API_URL}/auth/register`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-                    body: JSON.stringify({
-                        nickname,
-                        password
-                    })
-                }
-            );
-
-        const data =
-            await parseResponse(
-                response
-            );
-
-        alert(
-            data?.message ||
-            "회원가입이 완료되었습니다."
-        );
-
-    } catch (error) {
-        console.error(error);
-        alert(error.message);
-    }
+function base64Url(bytes) {
+    return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+async function beginOneIDLogin() {
+    const verifier = base64Url(crypto.getRandomValues(new Uint8Array(32)));
+    const state = base64Url(crypto.getRandomValues(new Uint8Array(24)));
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    const redirectUri = `${location.origin}/`;
+    sessionStorage.setItem(ONEID_VERIFIER_KEY, verifier);
+    sessionStorage.setItem(ONEID_STATE_KEY, state);
+    const query = new URLSearchParams({ client_id: ONEID_CLIENT_ID, redirect_uri: redirectUri, code_challenge: base64Url(digest), state });
+    location.assign(`${ONEID_API_URL}/login.html?${query}`);
+}
 
-// =========================================================
-// LOGIN
-// =========================================================
+function showOneIDMigration(message) {
+    document.getElementById("oneidMigrationPanel").hidden = false;
+    document.getElementById("oneidLoginStatus").textContent = message || "기존 계정을 이어 붙이거나 새 계정을 만들 수 있습니다.";
+    showPage("loginPage");
+}
 
-async function login() {
-    const nickname =
-        document.getElementById(
-            "loginNickname"
-        ).value.trim();
-
-    const password =
-        document.getElementById(
-            "loginPassword"
-        ).value;
-
-    if (!nickname || !password) {
-        alert(
-            "닉네임과 비밀번호를 입력하세요."
-        );
-
-        return;
-    }
-
+async function completeOneIDChoice(choice) {
+    const oneidToken = sessionStorage.getItem(ONEID_PENDING_TOKEN_KEY);
+    if (!oneidToken) { showOneIDMigration("ONEID 로그인이 만료됐어요. 다시 로그인해 주세요."); return; }
+    const payload = choice === "new" ? { create_new: true } : {
+        legacy_nickname: document.getElementById("legacyNickname").value.trim(),
+        legacy_password: document.getElementById("legacyPassword").value,
+    };
     try {
-        const response =
-            await fetch(
-                `${API_URL}/auth/login`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-                    body: JSON.stringify({
-                        nickname,
-                        password
-                    })
-                }
-            );
-
-        const data =
-            await parseResponse(
-                response
-            );
-
-        const token =
-            data?.access_token ||
-            data?.token;
-
-        if (!token) {
-            throw new Error(
-                "로그인 토큰을 받지 못했습니다."
-            );
-        }
-
-        setToken(token);
-
-        alert(
-            "로그인되었습니다."
-        );
-
+        const response = await fetch(`${API_URL}/auth/oneid/complete`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${oneidToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const result = await parseResponse(response);
+        setToken(result.access_token);
+        sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
+        document.getElementById("legacyPassword").value = "";
         await checkLogin();
-
         showEditor();
-
     } catch (error) {
-        console.error(error);
-        alert(error.message);
+        document.getElementById("oneidLoginStatus").textContent = error.message;
     }
 }
 
+async function handleOneIDCallback() {
+    const params = new URLSearchParams(location.search);
+    const code = params.get("code");
+    if (!code) return;
+    const state = params.get("state");
+    const expectedState = sessionStorage.getItem(ONEID_STATE_KEY);
+    const verifier = sessionStorage.getItem(ONEID_VERIFIER_KEY);
+    history.replaceState(null, "", `${location.pathname}${location.hash}`);
+    sessionStorage.removeItem(ONEID_STATE_KEY);
+    sessionStorage.removeItem(ONEID_VERIFIER_KEY);
+    if (!state || state !== expectedState || !verifier) { showOneIDMigration("로그인 연결을 확인하지 못했어요. 다시 시도해 주세요."); return; }
+    const response = await fetch(`${ONEID_API_URL}/api/oauth/token`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: ONEID_CLIENT_ID, redirect_uri: `${location.origin}/`, code, code_verifier: verifier }),
+    });
+    let session = {};
+    try { session = await response.json(); } catch {}
+    if (!response.ok || !session.access_token) { showOneIDMigration(session.detail || "ONEID 로그인을 완료하지 못했습니다."); return; }
+    sessionStorage.setItem(ONEID_PENDING_TOKEN_KEY, session.access_token);
+    sessionStorage.setItem("oneid_admin_access_token", session.access_token);
+    const complete = await fetch(`${API_URL}/auth/oneid/complete`, {
+        method: "POST", headers: { "Authorization": `Bearer ${session.access_token}`, "Content-Type": "application/json" }, body: "{}",
+    });
+    let result = {};
+    try { result = await complete.json(); } catch {}
+    if (!complete.ok) {
+        if (result.detail === "ONEID_ACCOUNT_CHOICE_REQUIRED") { showOneIDMigration(); return; }
+        showOneIDMigration(result.detail || "사이트 로그인을 완료하지 못했습니다.");
+        return;
+    }
+    setToken(result.access_token);
+    sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
+    await checkLogin();
+    showEditor();
+}
+
+function linkLegacyAccount() { return completeOneIDChoice("legacy"); }
+function createOneIDSiteAccount() { return completeOneIDChoice("new"); }
 
 // =========================================================
 // LOGOUT
@@ -283,6 +241,8 @@ async function login() {
 
 function logout() {
     removeToken();
+    sessionStorage.removeItem("oneid_admin_access_token");
+    sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
 
     currentArticleId = null;
     editingArticle = null;
@@ -2400,6 +2360,7 @@ document.addEventListener(
             );
         }
 
+        try { await handleOneIDCallback(); } catch (error) { showOneIDMigration(error?.message || "ONEID 연결 중 오류가 발생했습니다. 다시 로그인해 주세요."); }
         await checkLogin();
 
         updatePreview();
@@ -2421,10 +2382,11 @@ window.showArticles =
     showArticles;
 
 window.login =
-    login;
+    beginOneIDLogin;
 
-window.registerUser =
-    registerUser;
+window.beginOneIDLogin = beginOneIDLogin;
+window.linkLegacyAccount = linkLegacyAccount;
+window.createOneIDSiteAccount = createOneIDSiteAccount;
 
 window.logout =
     logout;

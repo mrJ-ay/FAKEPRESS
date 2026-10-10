@@ -49,31 +49,20 @@
     <div class="login-box">
       <h2>FAKEPRESS 로그인</h2>
 
-      <label>닉네임</label>
-      <input
-        id="loginNickname"
-        type="text"
-        placeholder="닉네임"
-        maxlength="20"
-      >
-
-      <label>비밀번호</label>
-      <input
-        id="loginPassword"
-        type="password"
-        placeholder="비밀번호"
-      >
-
-      <button onclick="login()">
-        로그인
-      </button>
-
-      <button
-        class="secondary"
-        onclick="registerUser()"
-      >
-        회원가입
-      </button>
+      <p>공통 계정 ONEID로 로그인합니다.</p>
+      <button onclick="beginOneIDLogin()">ONEID로 로그인</button>
+      <section id="oneidMigrationPanel" hidden>
+        <hr>
+        <h3>기존 FAKEPRESS 계정 연결</h3>
+        <p>기존 기사와 계정을 이어 쓰려면 예전 FAKEPRESS 닉네임과 비밀번호를 한 번 입력하세요. 이 정보는 확인 후 저장하지 않습니다.</p>
+        <label>기존 닉네임</label>
+        <input id="legacyNickname" type="text" maxlength="20" autocomplete="username">
+        <label>기존 비밀번호</label>
+        <input id="legacyPassword" type="password" autocomplete="current-password">
+        <button class="secondary" onclick="linkLegacyAccount()">기존 계정 연결</button>
+        <button class="secondary" onclick="createOneIDSiteAccount()">새 FAKEPRESS 계정으로 시작</button>
+        <p id="oneidLoginStatus" role="status" aria-live="polite"></p>
+      </section>
     </div>
   </section>
 
@@ -279,6 +268,8 @@
 
     <span id="loggedInUser"></span>
 
+    <button onclick="beginOneIDLogin()">ONEID 로그인</button>
+
     <button onclick="logout()">
       로그아웃
     </button>
@@ -287,6 +278,8 @@
 
 </main>
 
+<script src="api-config.js"></script>
+<script src="oneid-config.js"></script>
 <script src="script.js"></script>
 
 </body>
