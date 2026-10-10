@@ -166,74 +166,126 @@ async function beginOneIDLogin() {
     location.assign(`${ONEID_API_URL}/login.html?${query}`);
 }
 
-function showOneIDMigration(message) {
-    document.getElementById("oneidMigrationPanel").hidden = false;
-    document.getElementById("oneidLoginStatus").textContent = message || "기존 계정을 이어 붙이거나 새 계정을 만들 수 있습니다.";
-    showPage("loginPage");
-}
 
-async function completeOneIDChoice(choice) {
-    const oneidToken = sessionStorage.getItem(ONEID_PENDING_TOKEN_KEY);
-    if (!oneidToken) { showOneIDMigration("ONEID 로그인이 만료됐어요. 다시 로그인해 주세요."); return; }
-    const payload = choice === "new" ? { create_new: true } : {
-        legacy_nickname: document.getElementById("legacyNickname").value.trim(),
-        legacy_password: document.getElementById("legacyPassword").value,
-    };
-    try {
-        const response = await fetch(`${API_URL}/auth/oneid/complete`, {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${oneidToken}`, "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-        const result = await parseResponse(response);
-        setToken(result.access_token);
-        sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
-        document.getElementById("legacyPassword").value = "";
-        await checkLogin();
-        showEditor();
-    } catch (error) {
-        document.getElementById("oneidLoginStatus").textContent = error.message;
+function showOneIDMigration(message) {
+    const panel = document.getElementById("oneidMigrationPanel");
+    const status = document.getElementById("oneidLoginStatus");
+
+    if (panel) panel.hidden = true;
+
+    if (message) {
+        if (status) {
+            status.textContent = message;
+        } else {
+            alert(message);
+        }
     }
 }
+
+
+// =========================================================
+// ONEID LOGIN COMPLETION
+// =========================================================
 
 async function handleOneIDCallback() {
     const params = new URLSearchParams(location.search);
     const code = params.get("code");
+
     if (!code) return;
+
     const state = params.get("state");
     const expectedState = sessionStorage.getItem(ONEID_STATE_KEY);
     const verifier = sessionStorage.getItem(ONEID_VERIFIER_KEY);
-    history.replaceState(null, "", `${location.pathname}${location.hash}`);
+
+    history.replaceState(
+        null,
+        "",
+        `${location.pathname}${location.hash}`
+    );
+
     sessionStorage.removeItem(ONEID_STATE_KEY);
     sessionStorage.removeItem(ONEID_VERIFIER_KEY);
-    if (!state || state !== expectedState || !verifier) { showOneIDMigration("로그인 연결을 확인하지 못했어요. 다시 시도해 주세요."); return; }
-    const response = await fetch(`${ONEID_API_URL}/api/oauth/token`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: ONEID_CLIENT_ID, redirect_uri: `${location.origin}/`, code, code_verifier: verifier }),
-    });
-    let session = {};
-    try { session = await response.json(); } catch {}
-    if (!response.ok || !session.access_token) { showOneIDMigration(session.detail || "ONEID 로그인을 완료하지 못했습니다."); return; }
-    sessionStorage.setItem(ONEID_PENDING_TOKEN_KEY, session.access_token);
-    sessionStorage.setItem("oneid_admin_access_token", session.access_token);
-    const complete = await fetch(`${API_URL}/auth/oneid/complete`, {
-        method: "POST", headers: { "Authorization": `Bearer ${session.access_token}`, "Content-Type": "application/json" }, body: "{}",
-    });
-    let result = {};
-    try { result = await complete.json(); } catch {}
-    if (!complete.ok) {
-        if (result.detail === "ONEID_ACCOUNT_CHOICE_REQUIRED") { showOneIDMigration(); return; }
-        showOneIDMigration(result.detail || "사이트 로그인을 완료하지 못했습니다.");
+
+    if (!state || state !== expectedState || !verifier) {
+        showOneIDMigration("로그인 확인에 실패했습니다. 다시 로그인해 주세요.");
         return;
     }
-    setToken(result.access_token);
-    sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
-    await checkLogin();
-    showEditor();
-}
 
-function linkLegacyAccount() { return completeOneIDChoice("legacy"); }
-function createOneIDSiteAccount() { return completeOneIDChoice("new"); }
+    try {
+        // 1. ONEID에서 인증 코드를 토큰으로 교환
+        const response = await fetch(
+            `${ONEID_API_URL}/api/oauth/token`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    client_id: ONEID_CLIENT_ID,
+                    redirect_uri: `${location.origin}/`,
+                    code,
+                    code_verifier: verifier
+                })
+            }
+        );
+
+        const session = await response.json();
+
+        if (!response.ok || !session.access_token) {
+            throw new Error(
+                session.detail || "ONEID 로그인을 완료하지 못했습니다."
+            );
+        }
+
+        const oneidToken = session.access_token;
+
+        // 2. FAKEPRESS에서 새 계정 생성 또는 기존 ONEID 연결 계정 조회
+        // 요청 본문은 보내지 않음: 계정 선택 없이 자동 처리
+        const complete = await fetch(
+            `${API_URL}/auth/oneid/complete`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${oneidToken}`
+                }
+            }
+        );
+
+        const result = await complete.json();
+
+        if (!complete.ok || !result.access_token) {
+            throw new Error(
+                result.detail || "FAKEPRESS 로그인을 완료하지 못했습니다."
+            );
+        }
+
+        // 3. ONEID 토큰 저장
+        setToken(result.access_token);
+
+        // 관리자 기능 호환용으로도 토큰 보관
+        sessionStorage.setItem(
+            "oneid_admin_access_token",
+            result.access_token
+        );
+
+        sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
+
+        // 4. 로그인 상태 갱신
+        await checkLogin();
+
+        // 5. 로그인 후 편집 화면 표시
+        showEditor();
+
+    } catch (error) {
+        removeToken();
+        sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
+        sessionStorage.removeItem("oneid_admin_access_token");
+
+        showOneIDMigration(
+            error?.message || "로그인 중 오류가 발생했습니다."
+        );
+    }
+}
 
 // =========================================================
 // LOGOUT
@@ -2385,8 +2437,7 @@ window.login =
     beginOneIDLogin;
 
 window.beginOneIDLogin = beginOneIDLogin;
-window.linkLegacyAccount = linkLegacyAccount;
-window.createOneIDSiteAccount = createOneIDSiteAccount;
+
 
 window.logout =
     logout;

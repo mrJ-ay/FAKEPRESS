@@ -152,7 +152,7 @@ def verify_password(
 
 
 # =========================================================
-# AUTH
+# AUTH — ONEID ONLY
 # =========================================================
 
 security = HTTPBearer()
@@ -166,263 +166,162 @@ class RejectOneIDRedirects(urllib.request.HTTPRedirectHandler):
 def verify_oneid_access_token(authorization: str | None) -> dict:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="ONEID 로그인이 필요합니다.")
+
     token = authorization.split(" ", 1)[1].strip()
     if not token:
         raise HTTPException(status_code=401, detail="ONEID 로그인이 필요합니다.")
 
     endpoint = urlparse(ONEID_API_URL)
-    if endpoint.scheme != "https" and endpoint.hostname not in {"localhost", "127.0.0.1", "::1"}:
-        raise HTTPException(status_code=503, detail="운영 환경의 ONEID 주소는 HTTPS여야 합니다.")
+    if endpoint.scheme != "https" and endpoint.hostname not in {
+        "localhost", "127.0.0.1", "::1"
+    }:
+        raise HTTPException(
+            status_code=503,
+            detail="운영 환경의 ONEID 주소는 HTTPS여야 합니다.",
+        )
 
     request = urllib.request.Request(
         f"{ONEID_API_URL}/api/auth/me",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        },
     )
+
     try:
         opener = urllib.request.build_opener(RejectOneIDRedirects)
         with opener.open(request, timeout=8) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
-            raise HTTPException(status_code=401, detail="ONEID 로그인이 만료되었습니다.") from exc
-        raise HTTPException(status_code=503, detail="ONEID 계정 확인에 실패했습니다.") from exc
+            raise HTTPException(
+                status_code=401,
+                detail="ONEID 로그인이 만료되었거나 유효하지 않습니다.",
+            ) from exc
+        raise HTTPException(
+            status_code=503,
+            detail="ONEID 계정 확인에 실패했습니다.",
+        ) from exc
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail="ONEID 서버에 연결할 수 없습니다.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="ONEID 서버에 연결할 수 없습니다.",
+        ) from exc
 
     if not isinstance(payload, dict) or not payload.get("id"):
-        raise HTTPException(status_code=401, detail="ONEID 계정을 확인할 수 없습니다.")
+        raise HTTPException(
+            status_code=401,
+            detail="ONEID 계정을 확인할 수 없습니다.",
+        )
+
     return payload
 
 
-def create_access_token(
-    user_id: int,
-):
-
-    expire = (
-        datetime.now(timezone.utc)
-        + timedelta(
-            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-    )
-
-    payload = {
-        "sub": str(user_id),
-        "mode": "oneid",
-        "exp": expire,
-    }
-
-    return jwt.encode(
-        payload,
-        SECRET_KEY,
-        algorithm=ALGORITHM,
-    )
-
-
 def get_db():
-
     db = SessionLocal()
-
     try:
         yield db
-
     finally:
         db.close()
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(
-        security
-    ),
-    db: Session = Depends(get_db),
-):
+def get_or_create_oneid_user(oneid_user: dict, db: Session) -> User:
+    oneid_user_id = str(oneid_user["id"])
+    nickname = str(oneid_user.get("nickname") or "").strip()
 
-    token = credentials.credentials
-
-    try:
-
-        payload = jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=[ALGORITHM],
-        )
-
-        if payload.get("mode") != "oneid":
-            raise HTTPException(status_code=401, detail="ONEID로 다시 로그인해 주세요.")
-
-        user_id = payload.get("sub")
-
-        if not user_id:
-
-            raise HTTPException(
-                status_code=401,
-                detail="유효하지 않은 토큰입니다.",
-            )
-
-    except jwt.ExpiredSignatureError:
-
+    if not nickname or len(nickname) > 20:
         raise HTTPException(
-            status_code=401,
-            detail="로그인이 만료되었습니다.",
+            status_code=400,
+            detail="ONEID 닉네임을 1~20자로 설정해 주세요.",
         )
 
-    except jwt.JWTError:
-
-        raise HTTPException(
-            status_code=401,
-            detail="유효하지 않은 토큰입니다.",
-        )
-
-    try:
-
-        user_id = int(user_id)
-
-    except ValueError:
-
-        raise HTTPException(
-            status_code=401,
-            detail="유효하지 않은 사용자입니다.",
-        )
-
-    user = (
-        db.query(User)
-        .filter(
-            User.id == user_id
-        )
+    link = (
+        db.query(OneIDLink)
+        .filter(OneIDLink.oneid_user_id == oneid_user_id)
         .first()
     )
 
-    if not user:
+    user = (
+        db.query(User).filter(User.id == link.user_id).first()
+        if link else None
+    )
 
-        raise HTTPException(
-            status_code=401,
-            detail="사용자를 찾을 수 없습니다.",
+    # 기존 FAKEPRESS 계정과는 자동으로 연결하지 않는다.
+    # 동일한 ONEID 사용자는 이후 로그인에서도 같은 연결을 사용한다.
+    if user is None:
+        base = nickname[:20]
+        candidate = base
+
+        while db.query(User).filter(User.nickname == candidate).first():
+            suffix = "_" + uuid.uuid4().hex[:6]
+            candidate = nickname[:20 - len(suffix)] + suffix
+
+        user = User(
+            nickname=candidate,
+            password_hash=hash_password(uuid.uuid4().hex + uuid.uuid4().hex),
+            is_admin=1 if oneid_user.get("is_admin") else 0,
+            is_banned=0,
         )
+
+        try:
+            db.add(user)
+            db.flush()
+            db.add(OneIDLink(
+                oneid_user_id=oneid_user_id,
+                user_id=user.id,
+            ))
+            db.commit()
+            db.refresh(user)
+        except Exception as exc:
+            db.rollback()
+            # 다른 요청에서 같은 ONEID 계정을 먼저 생성했을 수 있다.
+            link = (
+                db.query(OneIDLink)
+                .filter(OneIDLink.oneid_user_id == oneid_user_id)
+                .first()
+            )
+            if link:
+                user = db.query(User).filter(User.id == link.user_id).first()
+            if user is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="FAKEPRESS 계정을 생성하지 못했습니다. 다시 로그인해 주세요.",
+                ) from exc
 
     if user.is_banned == 1:
-
         raise HTTPException(
             status_code=403,
-            detail="정지된 계정입니다.",
+            detail="이 사이트에서 이용 정지된 계정입니다.",
         )
+
+    # 관리자 권한은 ONEID에서 확인한 결과로 동기화한다.
+    expected_admin = 1 if oneid_user.get("is_admin") else 0
+    if user.is_admin != expected_admin:
+        user.is_admin = expected_admin
+        db.commit()
 
     return user
 
 
-def get_admin_user(
-    current_user: User = Depends(
-        get_current_user
-    ),
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
-    oneid_authorization: str | None = Header(default=None, alias="X-ONEID-Authorization"),
 ):
-
-    link = db.query(OneIDLink).filter(OneIDLink.user_id == current_user.id).first()
-    if link:
-        oneid_user = verify_oneid_access_token(oneid_authorization)
-        if str(oneid_user["id"]) != link.oneid_user_id or not oneid_user.get("is_admin"):
-            raise HTTPException(status_code=403, detail="ONEID 관리자 권한이 필요합니다.")
-        return current_user
-
-    raise HTTPException(status_code=403, detail="ONEID에 연결된 계정에 관리자 권한이 필요합니다.")
-
-
-# =========================================================
-# BANNED WORD HELPERS
-# =========================================================
-
-def get_banned_words(
-    db: Session,
-):
-
-    rows = db.execute(
-        text(
-            """
-            SELECT
-                id,
-                word,
-                created_at
-            FROM banned_words
-            ORDER BY id ASC
-            """
-        )
-    ).mappings().all()
-
-    return rows
-
-
-def find_banned_word(
-    db: Session,
-    title: str = "",
-    subtitle: str = "",
-    content: str = "",
-):
-
-    combined_text = " ".join(
-        [
-            title or "",
-            subtitle or "",
-            content or "",
-        ]
-    ).casefold()
-
-    rows = get_banned_words(db)
-
-    for row in rows:
-
-        banned_word = (
-            row["word"] or ""
-        ).strip()
-
-        if not banned_word:
-            continue
-
-        if (
-            banned_word.casefold()
-            in combined_text
-        ):
-            return banned_word
-
-    return None
-
-
-def delete_articles_containing_word(
-    db: Session,
-    banned_word: str,
-):
-
-    articles = (
-        db.query(Article)
-        .all()
+    oneid_user = verify_oneid_access_token(
+        f"Bearer {credentials.credentials}"
     )
+    return get_or_create_oneid_user(oneid_user, db)
 
-    target = banned_word.casefold()
 
-    deleted_count = 0
-
-    for article in articles:
-
-        combined_text = " ".join(
-            [
-                article.title or "",
-                article.subtitle or "",
-                article.content or "",
-            ]
-        ).casefold()
-
-        if target in combined_text:
-
-            db.query(Comment).filter(
-                Comment.article_id
-                == article.id
-            ).delete(
-                synchronize_session=False
-            )
-
-            db.delete(article)
-
-            deleted_count += 1
-
-    return deleted_count
+def get_admin_user(
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.is_admin != 1:
+        raise HTTPException(
+            status_code=403,
+            detail="ONEID 관리자 권한이 필요합니다.",
+        )
+    return current_user
 
 
 # =========================================================
@@ -556,66 +455,45 @@ def register(
 
 
 # =========================================================
-# LOGIN
+# LOGIN — ONEID ONLY
 # =========================================================
 
 @app.post("/auth/login")
-def login(
-    request: LoginRequest,
+def login_disabled():
+    raise HTTPException(
+        status_code=410,
+        detail="로그인은 ONEID를 이용해 주세요.",
+    )
+
+
+@app.post("/auth/oneid/complete")
+def complete_oneid_login(
+    authorization: str | None = Header(
+        default=None,
+        alias="Authorization",
+    ),
     db: Session = Depends(get_db),
 ):
-    raise HTTPException(status_code=410, detail="ONEID 로그인으로 통합되었습니다.")
+    # ONEID 서버에서 토큰 검증 및 사용자 정보 조회
+    oneid_user = verify_oneid_access_token(authorization)
 
-    nickname = request.nickname.strip()
+    # 최초 로그인은 새 FAKEPRESS 계정 생성,
+    # 이후 로그인은 기존 ONEID 연결 계정 사용
+    user = get_or_create_oneid_user(oneid_user, db)
 
-    user = (
-        db.query(User)
-        .filter(
-            User.nickname == nickname
-        )
-        .first()
-    )
-
-    if not user:
-
-        raise HTTPException(
-            status_code=401,
-            detail="닉네임 또는 비밀번호가 올바르지 않습니다.",
-        )
-
-    if not verify_password(
-        request.password,
-        user.password_hash,
-    ):
-
-        raise HTTPException(
-            status_code=401,
-            detail="닉네임 또는 비밀번호가 올바르지 않습니다.",
-        )
-
-    if user.is_banned == 1:
-
-        raise HTTPException(
-            status_code=403,
-            detail="정지된 계정입니다.",
-        )
-
-    token = create_access_token(
-        user.id
-    )
+    token = authorization.split(" ", 1)[1].strip()
 
     return {
-        "message": "로그인되었습니다.",
+        "message": "ONEID 로그인되었습니다.",
         "access_token": token,
         "token_type": "bearer",
         "user": {
             "id": user.id,
             "nickname": user.nickname,
-            "is_admin": user.is_admin,
-            "is_banned": user.is_banned,
+            "is_admin": user.is_admin == 1,
+            "is_banned": user.is_banned == 1,
         },
     }
-
 
 # =========================================================
 # CURRENT USER
