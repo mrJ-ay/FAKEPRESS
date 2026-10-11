@@ -454,8 +454,9 @@ def register(
     }
 
 
+
 # =========================================================
-# LOGIN — ONEID ONLY
+# LOGIN - ONEID ONLY
 # =========================================================
 
 @app.post("/auth/login")
@@ -474,17 +475,25 @@ def complete_oneid_login(
     ),
     db: Session = Depends(get_db),
 ):
-    # ONEID 서버에서 토큰 검증 및 사용자 정보 조회
+    # ONEID 서버에서 토큰을 검증하고 사용자 정보를 가져온다.
     oneid_user = verify_oneid_access_token(authorization)
 
-    # 최초 로그인은 새 FAKEPRESS 계정 생성,
-    # 이후 로그인은 기존 ONEID 연결 계정 사용
+    # FAKEPRESS 사용자 계정을 조회하거나 생성한다.
     user = get_or_create_oneid_user(oneid_user, db)
 
-    token = authorization.split(" ", 1)[1].strip()
+    # 정지된 계정은 로그인할 수 없다.
+    if user.is_banned == 1:
+        raise HTTPException(
+            status_code=403,
+            detail="이 사이트에서 이용이 정지된 계정입니다.",
+        )
+
+    # 반드시 FAKEPRESS 자체 JWT를 발급한다.
+    # ONEID access token을 반환하면 안 된다.
+    token = create_access_token(user.id)
 
     return {
-        "message": "ONEID 로그인되었습니다.",
+        "message": "ONEID 로그인이 완료되었습니다.",
         "access_token": token,
         "token_type": "bearer",
         "user": {
@@ -494,6 +503,9 @@ def complete_oneid_login(
             "is_banned": user.is_banned == 1,
         },
     }
+
+
+
 
 # =========================================================
 # CURRENT USER
