@@ -104,6 +104,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 ONEID_API_URL = os.getenv("ONEID_API_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
+def create_access_token(user_id: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {
+        "sub": str(user_id),
+        "exp": expire,
+    }
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
 # =========================================================
 # SUPABASE
 # =========================================================
@@ -313,10 +322,39 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ):
-    oneid_user = verify_oneid_access_token(
-        f"Bearer {credentials.credentials}"
-    )
-    return get_or_create_oneid_user(oneid_user, db)
+    token = credentials.credentials
+    user = None
+
+    # 1. FAKEPRESS 자체 발급 JWT 검증 시도
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id_str = payload.get("sub")
+        if user_id_str and str(user_id_str).isdigit():
+            user = db.query(User).filter(User.id == int(user_id_str)).first()
+    except Exception:
+        user = None
+
+    # 2. 자체 JWT 디코딩 실패 시 ONEID SSO 토큰으로 검증 시도 (하위 호환)
+    if user is None:
+        try:
+            oneid_user = verify_oneid_access_token(f"Bearer {token}")
+            user = get_or_create_oneid_user(oneid_user, db)
+        except Exception:
+            raise HTTPException(
+                status_code=401,
+                detail="로그인이 만료되었거나 유효하지 않습니다.",
+            )
+
+    if not user:
+        raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다.")
+
+    if user.is_banned == 1:
+        raise HTTPException(
+            status_code=403,
+            detail="이 사이트에서 이용이 정지된 계정입니다.",
+        )
+
+    return user
 
 
 def get_admin_user(
@@ -565,62 +603,6 @@ def link_oneid(
         raise HTTPException(status_code=409, detail="계정 연결을 저장하지 못했습니다. 이미 연결되었는지 새로고침해 확인해 주세요.") from exc
 
     return {"message": "ONEID 계정이 연결되었습니다.", "user": {"id": current_user.id, "nickname": nickname, "oneid_user_id": oneid_user_id}}
-
-
-@app.post("/auth/oneid/complete")
-def complete_oneid_login(
-    request: OneIDCompleteRequest,
-    oneid_authorization: str | None = Header(default=None, alias="Authorization"),
-    db: Session = Depends(get_db),
-):
-    oneid_user = verify_oneid_access_token(oneid_authorization)
-    oneid_user_id = str(oneid_user["id"])
-    nickname = str(oneid_user.get("nickname") or "").strip()
-    if not nickname or len(nickname) > 20:
-        raise HTTPException(status_code=409, detail="ONEID 닉네임을 1~20자로 정한 뒤 로그인해 주세요.")
-
-    link = db.query(OneIDLink).filter(OneIDLink.oneid_user_id == oneid_user_id).first()
-    user = db.query(User).filter(User.id == link.user_id).first() if link else None
-    if not user:
-        if request.create_new:
-            user = db.query(User).filter(User.nickname == nickname).first()
-            if user:
-                raise HTTPException(status_code=409, detail="이 닉네임은 기존 회원이 사용 중입니다. 기존 계정 연결을 선택해 주세요.")
-            user = User(nickname=nickname, password_hash=hash_password(uuid.uuid4().hex + uuid.uuid4().hex), is_admin=0, is_banned=0)
-            db.add(user)
-            db.flush()
-            db.add(OneIDLink(oneid_user_id=oneid_user_id, user_id=user.id))
-        elif request.legacy_nickname and request.legacy_password:
-            user = db.query(User).filter(User.nickname == request.legacy_nickname.strip()).first()
-            if not user or not verify_password(request.legacy_password, user.password_hash):
-                raise HTTPException(status_code=401, detail="기존 사이트 닉네임 또는 비밀번호가 올바르지 않습니다.")
-            if user.is_banned == 1:
-                raise HTTPException(status_code=403, detail="이 사이트에서 이용 정지된 계정입니다.")
-            nickname_owner = db.query(User).filter(User.nickname == nickname, User.id != user.id).first()
-            if nickname_owner:
-                raise HTTPException(status_code=409, detail="ONEID 닉네임이 다른 기존 회원과 겹칩니다. 사이트 관리자의 확인이 필요합니다.")
-            user.nickname = nickname
-            user.is_admin = 1 if oneid_user.get("is_admin") else 0
-            db.add(OneIDLink(oneid_user_id=oneid_user_id, user_id=user.id))
-        else:
-            raise HTTPException(status_code=409, detail="ONEID_ACCOUNT_CHOICE_REQUIRED")
-    else:
-        if user.is_banned == 1:
-            raise HTTPException(status_code=403, detail="이 사이트에서 이용 정지된 계정입니다.")
-        nickname_owner = db.query(User).filter(User.nickname == nickname, User.id != user.id).first()
-        if nickname_owner:
-            raise HTTPException(status_code=409, detail="ONEID 닉네임이 다른 기존 회원과 겹칩니다. 사이트 관리자의 확인이 필요합니다.")
-        user.nickname = nickname
-        user.is_admin = 1 if oneid_user.get("is_admin") else 0
-
-    try:
-        db.commit()
-        db.refresh(user)
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="ONEID 계정을 이 사이트에 연결하지 못했습니다.") from exc
-
-    return {"access_token": create_access_token(user.id), "token_type": "bearer", "user": {"id": user.id, "nickname": user.nickname, "is_admin": user.is_admin, "is_banned": user.is_banned}}
 
 
 # =========================================================
