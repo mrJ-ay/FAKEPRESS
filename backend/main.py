@@ -369,6 +369,99 @@ def get_admin_user(
 
 
 # =========================================================
+# BANNED WORD HELPERS
+# =========================================================
+
+def get_banned_words(
+    db: Session,
+):
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                id,
+                word,
+                created_at
+            FROM banned_words
+            ORDER BY id ASC
+            """
+        )
+    ).mappings().all()
+
+    return rows
+
+
+def find_banned_word(
+    db: Session,
+    title: str = "",
+    subtitle: str = "",
+    content: str = "",
+):
+    combined_text = " ".join(
+        [
+            title or "",
+            subtitle or "",
+            content or "",
+        ]
+    ).casefold()
+
+    rows = get_banned_words(db)
+
+    for row in rows:
+        banned_word = (
+            row["word"] or ""
+        ).strip()
+
+        if not banned_word:
+            continue
+
+        if (
+            banned_word.casefold()
+            in combined_text
+        ):
+            return banned_word
+
+    return None
+
+
+def delete_articles_containing_word(
+    db: Session,
+    banned_word: str,
+):
+    articles = (
+        db.query(Article)
+        .all()
+    )
+
+    target = banned_word.casefold()
+
+    deleted_count = 0
+
+    for article in articles:
+        combined_text = " ".join(
+            [
+                article.title or "",
+                article.subtitle or "",
+                article.content or "",
+            ]
+        ).casefold()
+
+        if target in combined_text:
+            db.query(Comment).filter(
+                Comment.article_id
+                == article.id
+            ).delete(
+                synchronize_session=False
+            )
+
+            db.delete(article)
+
+            deleted_count += 1
+
+    return deleted_count
+
+
+# =========================================================
 # REQUEST MODELS
 # =========================================================
 
