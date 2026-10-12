@@ -238,6 +238,7 @@ async function handleOneIDCallback() {
         }
 
         const oneidToken = session.access_token;
+        sessionStorage.setItem(ONEID_PENDING_TOKEN_KEY, oneidToken);
 
         // 2. FAKEPRESS에서 새 계정 생성 또는 기존 ONEID 연결 계정 조회
         // 요청 본문은 보내지 않음: 계정 선택 없이 자동 처리
@@ -246,8 +247,10 @@ async function handleOneIDCallback() {
             {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${oneidToken}`
-                }
+                    "Authorization": `Bearer ${oneidToken}`,
+                    "Content-Type": "application/json"
+                },
+                body: "{}"
             }
         );
 
@@ -278,7 +281,6 @@ async function handleOneIDCallback() {
 
     } catch (error) {
         removeToken();
-        sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
         sessionStorage.removeItem("oneid_admin_access_token");
 
         showOneIDMigration(
@@ -286,6 +288,46 @@ async function handleOneIDCallback() {
         );
     }
 }
+
+async function completeOneIDChoice(choice) {
+    const oneidToken = sessionStorage.getItem(ONEID_PENDING_TOKEN_KEY);
+    if (!oneidToken) {
+        showOneIDMigration("ONEID 로그인이 만료되었습니다. 다시 로그인해 주세요.");
+        return;
+    }
+    const legacyNicknameEl = document.getElementById("legacyNickname");
+    const legacyPasswordEl = document.getElementById("legacyPassword");
+    const payload = choice === "new" ? { create_new: true } : {
+        legacy_nickname: legacyNicknameEl ? legacyNicknameEl.value.trim() : "",
+        legacy_password: legacyPasswordEl ? legacyPasswordEl.value : "",
+    };
+    try {
+        const response = await fetch(`${API_URL}/auth/oneid/complete`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${oneidToken}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.access_token) {
+            throw new Error(result.detail || "계정 연결에 실패했습니다.");
+        }
+        setToken(result.access_token);
+        sessionStorage.setItem("oneid_admin_access_token", result.access_token);
+        sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
+        if (legacyPasswordEl) legacyPasswordEl.value = "";
+        await checkLogin();
+        showEditor();
+    } catch (error) {
+        const statusEl = document.getElementById("oneidLoginStatus");
+        if (statusEl) statusEl.textContent = error.message;
+    }
+}
+
+function linkLegacyAccount() { return completeOneIDChoice("legacy"); }
+function createOneIDSiteAccount() { return completeOneIDChoice("new"); }
 
 // =========================================================
 // LOGOUT
@@ -2437,6 +2479,8 @@ window.login =
     beginOneIDLogin;
 
 window.beginOneIDLogin = beginOneIDLogin;
+window.linkLegacyAccount = linkLegacyAccount;
+window.createOneIDSiteAccount = createOneIDSiteAccount;
 
 
 window.logout =

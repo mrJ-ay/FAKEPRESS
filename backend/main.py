@@ -101,7 +101,7 @@ ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
-ONEID_API_URL = os.getenv("ONEID_API_URL", "http://127.0.0.1:8000").rstrip("/")
+ONEID_API_URL = os.getenv("ONEID_API_URL", "https://oneid-icvq.onrender.com").rstrip("/")
 
 
 def create_access_token(user_id: int) -> str:
@@ -606,6 +606,7 @@ def login_disabled():
 
 @app.post("/auth/oneid/complete")
 def complete_oneid_login(
+    request: OneIDCompleteRequest = OneIDCompleteRequest(),
     authorization: str | None = Header(
         default=None,
         alias="Authorization",
@@ -614,9 +615,36 @@ def complete_oneid_login(
 ):
     # ONEID 서버에서 토큰을 검증하고 사용자 정보를 가져온다.
     oneid_user = verify_oneid_access_token(authorization)
+    oneid_user_id = str(oneid_user["id"])
+    nickname = str(oneid_user.get("nickname") or "").strip()
 
-    # FAKEPRESS 사용자 계정을 조회하거나 생성한다.
-    user = get_or_create_oneid_user(oneid_user, db)
+    # 1. 기존 연결 확인
+    link = db.query(OneIDLink).filter(OneIDLink.oneid_user_id == oneid_user_id).first()
+    user = db.query(User).filter(User.id == link.user_id).first() if link else None
+
+    # 2. 기존 계정 연결 요청이 들어온 경우 (legacy_nickname + legacy_password)
+    if not user and request.legacy_nickname and request.legacy_password:
+        legacy_user = db.query(User).filter(User.nickname == request.legacy_nickname.strip()).first()
+        if not legacy_user or not verify_password(request.legacy_password, legacy_user.password_hash):
+            raise HTTPException(status_code=401, detail="기존 FAKEPRESS 닉네임 또는 비밀번호가 올바르지 않습니다.")
+        if legacy_user.is_banned == 1:
+            raise HTTPException(status_code=403, detail="이 사이트에서 이용이 정지된 계정입니다.")
+        existing_link = db.query(OneIDLink).filter(OneIDLink.user_id == legacy_user.id).first()
+        if existing_link:
+            raise HTTPException(status_code=409, detail="해당 FAKEPRESS 계정은 이미 다른 ONEID 계정에 연결되어 있습니다.")
+
+        user = legacy_user
+        db.add(OneIDLink(oneid_user_id=oneid_user_id, user_id=user.id))
+        try:
+            db.commit()
+            db.refresh(user)
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="계정 연결을 저장하지 못했습니다.") from exc
+
+    # 3. 연결된 계정이 없으면 자동 생성 / 연결 (원클릭 SSO)
+    if not user:
+        user = get_or_create_oneid_user(oneid_user, db)
 
     # 정지된 계정은 로그인할 수 없다.
     if user.is_banned == 1:
@@ -625,8 +653,13 @@ def complete_oneid_login(
             detail="이 사이트에서 이용이 정지된 계정입니다.",
         )
 
+    # 관리자 권한 동기화
+    expected_admin = 1 if oneid_user.get("is_admin") else 0
+    if user.is_admin != expected_admin:
+        user.is_admin = expected_admin
+        db.commit()
+
     # 반드시 FAKEPRESS 자체 JWT를 발급한다.
-    # ONEID access token을 반환하면 안 된다.
     token = create_access_token(user.id)
 
     return {
