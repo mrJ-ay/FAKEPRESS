@@ -265,10 +265,10 @@ async function handleOneIDCallback() {
         // 3. ONEID 토큰 저장
         setToken(result.access_token);
 
-        // 관리자 기능 호환용으로도 토큰 보관
+        // 관리자 기능 호환용으로도 ONEID 토큰 보관
         sessionStorage.setItem(
             "oneid_admin_access_token",
-            result.access_token
+            oneidToken
         );
 
         sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
@@ -315,7 +315,7 @@ async function completeOneIDChoice(choice) {
             throw new Error(result.detail || "계정 연결에 실패했습니다.");
         }
         setToken(result.access_token);
-        sessionStorage.setItem("oneid_admin_access_token", result.access_token);
+        sessionStorage.setItem("oneid_admin_access_token", oneidToken);
         sessionStorage.removeItem(ONEID_PENDING_TOKEN_KEY);
         if (legacyPasswordEl) legacyPasswordEl.value = "";
         await checkLogin();
