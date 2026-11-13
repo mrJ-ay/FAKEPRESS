@@ -101,7 +101,7 @@ ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
-ONEID_API_URL = os.getenv("ONEID_API_URL", "https://oneid-icvq.onrender.com").rstrip("/")
+ONEID_API_URL = os.getenv("ONEID_API_URL", "https://oneid-ruddy.vercel.app").rstrip("/")
 
 
 def create_access_token(user_id: int) -> str:
