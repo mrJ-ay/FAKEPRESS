@@ -743,24 +743,13 @@ async def upload_image(
     ),
 ):
 
-    if supabase is None:
-
-        raise HTTPException(
-            status_code=500,
-            detail="Supabase Storage가 설정되지 않았습니다.",
-        )
-
     if not file.content_type:
-
         raise HTTPException(
             status_code=400,
             detail="파일 형식을 확인할 수 없습니다.",
         )
 
-    if not file.content_type.startswith(
-        "image/"
-    ):
-
+    if not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
             detail="이미지 파일만 업로드할 수 있습니다.",
@@ -769,68 +758,48 @@ async def upload_image(
     contents = await file.read()
 
     if not contents:
-
         raise HTTPException(
             status_code=400,
             detail="빈 파일입니다.",
         )
 
-    extension = Path(
-        file.filename or ""
-    ).suffix.lower()
+    if len(contents) > 4 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="이미지 용량은 4MB 이하만 업로드할 수 있습니다.",
+        )
 
-    if not extension:
-        extension = ".jpg"
-
-    filename = (
-        f"{uuid.uuid4().hex}"
-        f"{extension}"
-    )
-
+    extension = Path(file.filename or "").suffix.lower() or ".jpg"
+    filename = f"{uuid.uuid4().hex}{extension}"
     bucket_name = "images"
 
-    try:
-
-        supabase.storage.from_(
-            bucket_name
-        ).upload(
-            filename,
-            contents,
-            {
-                "content-type":
-                    file.content_type,
-                "upsert": "false",
-            },
-        )
-
-        public_url = (
-            supabase.storage
-            .from_(bucket_name)
-            .get_public_url(
-                filename
+    if supabase is not None:
+        try:
+            supabase.storage.from_(bucket_name).upload(
+                filename,
+                contents,
+                {
+                    "content-type": file.content_type,
+                    "upsert": "false",
+                },
             )
-        )
+            public_url = supabase.storage.from_(bucket_name).get_public_url(filename)
+            return {
+                "message": "이미지가 업로드되었습니다.",
+                "image": public_url,
+                "image_url": public_url,
+            }
+        except Exception as error:
+            print("SUPABASE STORAGE FALLBACK TO DATA URI:", error)
 
-        return {
-            "message":
-                "이미지가 업로드되었습니다.",
-            "image":
-                public_url,
-            "image_url":
-                public_url,
-        }
-
-    except Exception as error:
-
-        print(
-            "IMAGE UPLOAD ERROR:",
-            error
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="이미지 업로드에 실패했습니다.",
-        )
+    import base64
+    b64 = base64.b64encode(contents).decode("ascii")
+    data_uri = f"data:{file.content_type};base64,{b64}"
+    return {
+        "message": "이미지가 업로드되었습니다.",
+        "image": data_uri,
+        "image_url": data_uri,
+    }
 
 
 # =========================================================
